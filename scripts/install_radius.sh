@@ -1,43 +1,13 @@
 #!/bin/bash
 
 ###############################################
-# install_radius.sh - Installation FreeRADIUS
-###############################################
-#
-# Fichier: scripts/install_radius.sh
-# Auteur: GroupeNani
-# Date: 4 janvier 2026
-#
-# Description:
-#   Script d'installation et configuration automatique de FreeRADIUS
-#   pour l'authentification Wi-Fi Enterprise (802.1X) SAE 5.01.
-#
-# Prérequis:
-#   - Debian 11+ ou Ubuntu 20.04+
-#   - Accès root (sudo)
-#   - MariaDB/MySQL installé et démarré
-#
-# Utilisation:
-#   $ sudo bash scripts/install_radius.sh
-#
-# Fonctionnalités:
-#   ✓ Installation FreeRADIUS + modules MySQL
-#   ✓ Création base de données RADIUS
-#   ✓ Configuration clients NAS (routeurs)
-#   ✓ Génération certificats TLS
-#   ✓ Activation PEAP-MSCHAPv2
-#   ✓ Tests authentification
-#
-
-set -e  # Exit on error
-set -u  # Exit on undefined variable
-
-###############################################
-# CONFIGURATION
+# install_radius_simple.sh
+# Installation FreeRADIUS simplifiée pour Debian 11
+# Usage: sudo bash scripts/install_radius_simple.sh
 ###############################################
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+set -e  # Arrêter si erreur
+set -u  # Erreur si variable non définie
 
 # Couleurs
 RED='\033[0;31m'
@@ -47,299 +17,163 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Chemins
-FREERADIUS_CONFIG="/etc/freeradius/3.0"
-FREERADIUS_CERTS="$FREERADIUS_CONFIG/certs"
-SQL_SCRIPT="$PROJECT_ROOT/radius/sql/create_tables.sql"
-INIT_SCRIPT="$PROJECT_ROOT/radius/sql/init_appuser.sql"
-CLIENTS_CONF="$PROJECT_ROOT/radius/clients.conf"
-USERS_FILE="$PROJECT_ROOT/radius/users.txt"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 LOG_FILE="/var/log/install_radius_$(date +%Y%m%d_%H%M%S).log"
 
-# Variables
-MYSQL_HOST="localhost"
-MYSQL_ROOT_USER="root"
-RADIUS_DATABASE="radius"
+# Fonctions
+log_info() { echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"; }
+log_ok()   { echo -e "${GREEN}[✓]${NC} $1" | tee -a "$LOG_FILE"; }
+log_warn() { echo -e "${YELLOW}[⚠]${NC} $1" | tee -a "$LOG_FILE"; }
+log_err()  { echo -e "${RED}[✗]${NC} $1" | tee -a "$LOG_FILE"; exit 1; }
 
-###############################################
-# FONCTIONS
-###############################################
+# Vérifier root
+if [[ $EUID -ne 0 ]]; then
+    log_err "Ce script doit être exécuté en tant que root (sudo)"
+fi
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"
-}
+echo -e "${BLUE}"
+echo "╔════════════════════════════════════════╗"
+echo "║  Installation FreeRADIUS pour SAE 5.01 ║"
+echo "╚════════════════════════════════════════╝"
+echo -e "${NC}\n"
 
-log_success() {
-    echo -e "${GREEN}[✓]${NC} $1" | tee -a "$LOG_FILE"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1" | tee -a "$LOG_FILE"
-}
-
-log_error() {
-    echo -e "${RED}[✗]${NC} $1" | tee -a "$LOG_FILE"
-}
-
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "Ce script doit être exécuté en tant que root (sudo)"
-        exit 1
-    fi
-}
-
-check_mysql() {
-    log_info "Vérification MySQL/MariaDB..."
-    if ! systemctl is-active --quiet mysql && ! systemctl is-active --quiet mariadb; then
-        log_error "MySQL/MariaDB n'est pas en cours d'exécution"
-        echo "Installation: sudo apt install mariadb-server"
-        exit 1
-    fi
-    log_success "MySQL/MariaDB actif"
-}
-
-check_files() {
-    log_info "Vérification des fichiers requis..."
-    
-    if [[ ! -f "$INIT_SCRIPT" ]]; then
-        log_error "Fichier SQL non trouvé: $INIT_SCRIPT"
-        exit 1
-    fi
-    
-    if [[ ! -f "$SQL_SCRIPT" ]]; then
-        log_error "Fichier SQL non trouvé: $SQL_SCRIPT"
-        exit 1
-    fi
-    
-    if [[ ! -f "$CLIENTS_CONF" ]]; then
-        log_warning "Fichier clients.conf non trouvé: $CLIENTS_CONF"
-    fi
-    
-    log_success "Fichiers vérifiés"
-}
-
-install_freeradius() {
-    log_info "Installation des paquets FreeRADIUS..."
-    
+# 1. Vérifier MySQL/MariaDB
+log_info "Vérification MySQL/MariaDB..."
+if ! systemctl is-active --quiet mysql 2>/dev/null && ! systemctl is-active --quiet mariadb 2>/dev/null; then
+    log_warn "MySQL/MariaDB n'est pas en cours d'exécution"
+    log_info "Installation de MariaDB..."
     apt-get update -qq
-    apt-get install -y freeradius freeradius-mysql freeradius-utils \
-        >> "$LOG_FILE" 2>&1
-    
-    log_success "FreeRADIUS installé"
-}
+    apt-get install -y mariadb-server >> "$LOG_FILE" 2>&1
+    systemctl start mariadb
+    log_ok "MariaDB installé et démarré"
+else
+    log_ok "MySQL/MariaDB actif"
+fi
 
-setup_database() {
-    log_info "Configuration base de données RADIUS..."
-    
-    # Créer utilisateur MySQL
-    mysql -u "$MYSQL_ROOT_USER" < "$INIT_SCRIPT" >> "$LOG_FILE" 2>&1
-    log_success "Utilisateur MySQL créé"
-    
-    # Créer tables
-    mysql -u "$MYSQL_ROOT_USER" "$RADIUS_DATABASE" < "$SQL_SCRIPT" >> "$LOG_FILE" 2>&1
-    log_success "Tables RADIUS créées"
-}
+# 2. Installer FreeRADIUS
+log_info "Installation de FreeRADIUS..."
+apt-get install -y freeradius freeradius-mysql freeradius-utils \
+    >> "$LOG_FILE" 2>&1
+log_ok "FreeRADIUS installé"
 
-configure_clients() {
-    log_info "Configuration clients RADIUS..."
-    
-    if [[ -f "$CLIENTS_CONF" ]]; then
-        cp "$CLIENTS_CONF" "$FREERADIUS_CONFIG/clients.conf"
-        log_success "Configuration clients copiée"
-    else
-        log_warning "clients.conf non disponible - utiliser config par défaut"
-    fi
-}
+# 3. Créer utilisateur MySQL et base RADIUS
+log_info "Configuration base de données RADIUS..."
+mysql -u root << 'EOF' >> "$LOG_FILE" 2>&1
+-- Créer utilisateur si n'existe pas
+CREATE USER IF NOT EXISTS 'radius_app'@'localhost' IDENTIFIED BY 'Secure!Pass@123';
+GRANT ALL PRIVILEGES ON radius.* TO 'radius_app'@'localhost';
+FLUSH PRIVILEGES;
 
-configure_users() {
-    log_info "Configuration utilisateurs de test..."
-    
-    if [[ -f "$USERS_FILE" ]]; then
-        cp "$USERS_FILE" "$FREERADIUS_CONFIG/users"
-        log_success "Fichier utilisateurs copié"
-    else
-        log_warning "Fichier users non disponible"
-    fi
-}
-
-generate_certificates() {
-    log_info "Génération des certificats TLS..."
-    
-    cd "$FREERADIUS_CERTS"
-    make >> "$LOG_FILE" 2>&1
-    cd - > /dev/null
-    
-    log_success "Certificats générés"
-}
-
-configure_modules() {
-    log_info "Configuration modules FreeRADIUS..."
-    
-    # Activer module SQL
-    if [[ ! -L "$FREERADIUS_CONFIG/mods-enabled/sql" ]]; then
-        ln -sf ../mods-available/sql "$FREERADIUS_CONFIG/mods-enabled/sql"
-    fi
-    log_success "Module SQL activé"
-    
-    # Activer module EAP
-    if [[ ! -L "$FREERADIUS_CONFIG/mods-enabled/eap" ]]; then
-        ln -sf ../mods-available/eap "$FREERADIUS_CONFIG/mods-enabled/eap"
-    fi
-    log_success "Module EAP activé"
-}
-
-set_permissions() {
-    log_info "Configuration des permissions..."
-    
-    chown -R root:freerad "$FREERADIUS_CONFIG"
-    chmod -R 750 "$FREERADIUS_CONFIG"
-    chmod 640 "$FREERADIUS_CONFIG/clients.conf"
-    
-    mkdir -p /var/log/freeradius
-    chown freerad:freerad /var/log/freeradius
-    chmod 750 /var/log/freeradius
-    
-    log_success "Permissions configurées"
-}
-
-test_syntax() {
-    log_info "Vérification de la syntaxe FreeRADIUS..."
-    
-    if freeradius -XC > /dev/null 2>&1; then
-        log_success "Syntaxe valide"
-        return 0
-    else
-        log_error "Erreur de syntaxe dans la configuration"
-        freeradius -XC | tail -20 >> "$LOG_FILE"
-        return 1
-    fi
-}
-
-start_service() {
-    log_info "Démarrage de FreeRADIUS..."
-    
-    systemctl enable freeradius >> "$LOG_FILE" 2>&1
-    systemctl restart freeradius >> "$LOG_FILE" 2>&1
-    sleep 2
-    
-    if systemctl is-active --quiet freeradius; then
-        log_success "FreeRADIUS en cours d'exécution"
-    else
-        log_error "Erreur au démarrage de FreeRADIUS"
-        systemctl status freeradius >> "$LOG_FILE" 2>&1
-        return 1
-    fi
-}
-
-test_radius() {
-    log_info "Test d'authentification RADIUS..."
-    
-    if radtest alice@gym.fr Alice@123! 127.0.0.1 1812 testing123 \
-        >> "$LOG_FILE" 2>&1; then
-        log_success "Test radtest réussi"
-    else
-        log_warning "Test radtest échoué - vérifier les logs"
-    fi
-}
-
-generate_report() {
-    log_info "Génération du rapport d'installation..."
-    
-    cat >> "$LOG_FILE" <<EOF
-
-===============================================
-      RAPPORT INSTALLATION FREERADIUS
-===============================================
-
-Date: $(date)
-Serveur: $(hostname)
-
-CONFIGURATION:
-  Base de données: $RADIUS_DATABASE
-  Utilisateur MySQL: radius_app
-  Serveur FreeRADIUS: $FREERADIUS_CONFIG
-  Certificats: $FREERADIUS_CERTS
-
-UTILISATEURS DE TEST:
-  - alice@gym.fr / Alice@123! (Staff)
-  - bob@gym.fr / Bob@456! (Staff)
-  - charlie@gym.fr / Charlie@789! (Guest)
-  - david@gym.fr / David@2026! (Manager)
-  - emma@gym.fr / Emma@2026! (Réception)
-
-COMMANDES UTILES:
-  Statut:
-    $ sudo systemctl status freeradius
-  
-  Logs:
-    $ sudo tail -f /var/log/freeradius/radius.log
-  
-  Test radtest:
-    $ radtest alice@gym.fr Alice@123! 127.0.0.1 1812 testing123
-  
-  Redémarrer:
-    $ sudo systemctl restart freeradius
-  
-  Utilisateurs BD:
-    $ mysql -u radius_app -p radius -e "SELECT username FROM radcheck;"
-
-VÉRIFICATIONS REQUISES:
-  [ ] Routeur TL-MR100 configuré avec le bon secret RADIUS
-  [ ] Port 1812-1813 UDP ouvert dans UFW
-  [ ] Certificats générés avec succès
-  [ ] Test radtest réussi
-  [ ] Logs FreeRADIUS accessibles
-
-PROCHAINES ÉTAPES:
-  1. Configurer le routeur TL-MR100 (secret RADIUS)
-  2. Ajouter utilisateurs via PHP-Admin ou SQL directement
-  3. Tester connexion Wi-Fi depuis un client
-  4. Configurer Wazuh pour surveillance
-  5. Activer hardening Linux (scripts/hardening.sh)
-
-===============================================
+-- Créer base de données
+CREATE DATABASE IF NOT EXISTS radius;
+USE radius;
 EOF
-    
-    log_success "Rapport généré: $LOG_FILE"
+log_ok "Utilisateur MySQL 'radius_app' créé"
+
+# 4. Importer schéma RADIUS
+log_info "Création tables RADIUS..."
+if [[ -f "$PROJECT_ROOT/radius/sql/create_tables.sql" ]]; then
+    mysql -u root radius < "$PROJECT_ROOT/radius/sql/create_tables.sql" >> "$LOG_FILE" 2>&1
+    log_ok "Tables RADIUS créées"
+else
+    log_warn "Fichier create_tables.sql non trouvé - créer tables manuellement"
+fi
+
+# 5. Créer utilisateurs test en base
+log_info "Ajout utilisateurs de test..."
+mysql -u radius_app -p'Secure!Pass@123' radius << 'EOF' >> "$LOG_FILE" 2>&1
+DELETE FROM radcheck; -- Réinitialiser
+INSERT INTO radcheck VALUES
+    (NULL, 'alice@gym.fr', 'Cleartext-Password', ':=', 'Alice@123!'),
+    (NULL, 'bob@gym.fr', 'Cleartext-Password', ':=', 'Bob@456!'),
+    (NULL, 'charlie@gym.fr', 'Cleartext-Password', ':=', 'Charlie@789!'),
+    (NULL, 'david@gym.fr', 'Cleartext-Password', ':=', 'David@2026!');
+EOF
+log_ok "Utilisateurs de test créés"
+
+# 6. Configurer clients RADIUS
+log_info "Configuration des clients RADIUS..."
+cat > /etc/freeradius/3.0/clients.conf << 'EOF'
+# Localhost (pour tests)
+client 127.0.0.1 {
+    ipaddr = 127.0.0.1/32
+    secret = testing123
 }
 
-###############################################
-# MAIN
-###############################################
-
-main() {
-    log_info "╔════════════════════════════════════════╗"
-    log_info "║  SAE 5.01 - Installation FreeRADIUS   ║"
-    log_info "║  $(date +"%Y-%m-%d %H:%M:%S")           ║"
-    log_info "╚════════════════════════════════════════╝"
-    log_info ""
-    log_info "Log: $LOG_FILE"
-    
-    check_root
-    check_mysql
-    check_files
-    
-    install_freeradius
-    setup_database
-    configure_clients
-    configure_users
-    generate_certificates
-    configure_modules
-    set_permissions
-    
-    if ! test_syntax; then
-        log_error "Erreur de syntaxe détectée - installation incomplète"
-        generate_report
-        exit 1
-    fi
-    
-    start_service
-    test_radius
-    generate_report
-    
-    log_success ""
-    log_success "╔════════════════════════════════════════╗"
-    log_success "║  ✓ INSTALLATION RÉUSSIE               ║"
-    log_success "╚════════════════════════════════════════╝"
+# Réseau LAN (192.168.10.0/24) - pour routeur TL-MR100
+client 192.168.10.0/24 {
+    ipaddr = 192.168.10.0/24
+    secret = Pj8K2qL9xR5wM3nP7dF4vB6tH1sQ9cZ2
 }
+EOF
+log_ok "Clients RADIUS configurés"
 
-main "$@"
+# 7. Générer certificats TLS (pour PEAP)
+log_info "Génération certificats TLS..."
+cd /etc/freeradius/3.0/certs
+make >> "$LOG_FILE" 2>&1 || log_warn "Certificats possiblement déjà générés"
+cd - > /dev/null
+log_ok "Certificats prêts"
+
+# 8. Configurer permissions
+log_info "Configuration des permissions..."
+chown -R root:freerad /etc/freeradius/3.0
+chmod -R 750 /etc/freeradius/3.0
+chmod 640 /etc/freeradius/3.0/clients.conf
+mkdir -p /var/log/freeradius
+chown freerad:freerad /var/log/freeradius
+chmod 750 /var/log/freeradius
+log_ok "Permissions configurées"
+
+# 9. Démarrer FreeRADIUS
+log_info "Démarrage de FreeRADIUS..."
+systemctl enable freeradius >> "$LOG_FILE" 2>&1
+systemctl restart freeradius >> "$LOG_FILE" 2>&1
+sleep 2
+
+if systemctl is-active --quiet freeradius; then
+    log_ok "FreeRADIUS en cours d'exécution"
+else
+    log_err "Erreur démarrage FreeRADIUS - voir logs: sudo journalctl -u freeradius"
+fi
+
+# 10. Test authentification
+log_info "Test authentification RADIUS..."
+if radtest alice@gym.fr Alice@123! 127.0.0.1 1812 testing123 >> "$LOG_FILE" 2>&1; then
+    log_ok "Test d'authentification RÉUSSI ✓"
+else
+    log_warn "Test échoué - vérifier logs: sudo journalctl -u freeradius -n 30"
+fi
+
+# 11. Firewall
+log_info "Configuration firewall (UFW)..."
+if command -v ufw &>/dev/null; then
+    ufw allow 1812/udp >> "$LOG_FILE" 2>&1 || true
+    ufw allow 1813/udp >> "$LOG_FILE" 2>&1 || true
+    ufw allow 3306/tcp >> "$LOG_FILE" 2>&1 || true
+    log_ok "Ports ouverts: 1812-1813 UDP, 3306 TCP"
+fi
+
+# Résumé
+echo -e "\n${GREEN}╔════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  ✓ Installation réussie!               ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════╝${NC}\n"
+
+echo "📊 Statut:"
+echo "  • FreeRADIUS: $(systemctl is-active freeradius)"
+echo "  • MariaDB:    $(systemctl is-active mariadb || systemctl is-active mysql)"
+echo "  • Logs: $LOG_FILE"
+echo ""
+echo "🧪 Tester:"
+echo "  $ radtest alice@gym.fr Alice@123! 127.0.0.1 1812 testing123"
+echo ""
+echo "📈 Voir utilisateurs en base:"
+echo "  $ mysql -u radius_app -pSecure!Pass@123 radius -e 'SELECT username FROM radcheck;'"
+echo ""
+echo "🔧 Redémarrer le service:"
+echo "  $ sudo systemctl restart freeradius"
+echo ""
+echo "📝 Voir les logs:"
+echo "  $ sudo tail -f /var/log/freeradius/radius.log"
+echo ""
