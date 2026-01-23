@@ -351,6 +351,61 @@ sudo journalctl -u radiusd --since today
 
 ---
 
+## 🌐 GitHub Pages & GitHub Actions
+
+### 🎇 GitHub Pages (Documentation en ligne)
+
+**Status**: ✅ PRÊT
+
+La documentation est disponible sur:
+```
+https://sfrayan.github.io/SAE501
+```
+
+**Pour activer**:
+1. Allez dans **Settings** → **Pages**
+2. Branch: `main`
+3. Folder: `/docs`
+4. Cliquez "Save"
+5. Site accessible automatiquement en 1-2 minutes
+
+**Contenu**:
+- Page d'accueil avec guide rapide
+- Liens vers toute la documentation
+- Architecture technique
+- Guide de sécurité
+
+### ⚙️ GitHub Actions (CI/CD automatisé)
+
+**Status**: ✅ ACTIVÉ
+
+**Workflows configurés**:
+
+#### 1. **CI Tests** (ci-tests.yml)
+
+À chaque push sur `main` ou `develop`:
+- ✓ Lint Bash scripts (ShellCheck)
+- ✓ Validation fichiers config (SQL, PHP)
+- ✓ Scan secrets (TruffleHog)
+- ✓ Vérification documentation
+- ✓ Test scripts installation
+
+Résultat: **Badge automatique** ✅
+
+#### 2. **Deploy Pages** (deploy-pages.yml)
+
+À chaque push dans `docs/`:
+- ✓ Build documentation (Jekyll)
+- ✓ Deploy automatique GitHub Pages
+- ✓ URL: `https://sfrayan.github.io/SAE501`
+
+**Voir l'état des workflows**:
+1. Allez sur GitHub → **Actions**
+2. Voir l'historique et état des builds
+3. Vérifier logs en cas d'erreur
+
+---
+
 ## 🔐 Sécurité - POINTS CRITIQUES
 
 ### ⚠️ AVANT PRODUCTION
@@ -435,15 +490,17 @@ SAE501/
 │   ├── local_rules.xml
 │   └── syslog-tlmr100.conf
 │
-├── docs/                       # Documentation technique
+├── docs/                       # Documentation & GitHub Pages
+│   ├── index.md                🎆 Page d'accueil
+│   ├── _config.yml             🎆 Configuration Jekyll
 │   ├── dossier-architecture.md
 │   ├── hardening-linux.md
-│   ├── journal-de-bord.md
-│   └── index.md
+│   └── journal-de-bord.md
 │
 ├── .github/
 │   └── workflows/
-│       └── test-installation.yml
+│       ├── ci-tests.yml            🎆 Tests automatisés
+│       └── deploy-pages.yml        🎆 Déploiement Pages
 │
 └── README.md                   # CE FICHIER
 ```
@@ -460,6 +517,8 @@ SAE501/
 | Wazuh ne répond pas | `sudo systemctl restart wazuh-manager elasticsearch` |
 | Authentification échoue | Vérifier identifiant/mot de passe en PHP-Admin |
 | Connexion Wi-Fi échoue | Vérifier logs: `sudo tail -f /var/log/freeradius/radius.log` |
+| GitHub Pages ne s'affiche pas | Vérifier Settings → Pages et attendre 2 min |
+| Tests CI échouent | Vérifier **Actions** pour les erreurs |
 
 ---
 
@@ -510,6 +569,8 @@ mysqldump -u root -p radius > backup.sql
 - [ ] Logs d'audit consultés
 - [ ] Firewall UFW configuré
 - [ ] Sauvegardes planifiées
+- [ ] **GitHub Pages activé** (optionnel mais recommandé)
+- [ ] **GitHub Actions fonctionne** (automatique)
 
 ---
 
@@ -519,7 +580,8 @@ mysqldump -u root -p radius > backup.sql
 - **Durée sans script**: 1-2 heures (manuel)
 - **Production-ready**: 95% après configuration
 - **Support technique**: Voir les logs ou scripts de diagnostics
-- **Documentation**: Plus de détails dans `docs/`
+- **Documentation en ligne**: https://sfrayan.github.io/SAE501
+- **CI/CD**: Automatique avec GitHub Actions
 
 ---
 
@@ -534,6 +596,9 @@ bash scripts/show_credentials.sh
 
 # Et accéder à l'interface:
 http://VOTRE_IP/admin
+
+# Ou consulter la doc en ligne:
+https://sfrayan.github.io/SAE501
 ```
 
 **Bonne chance! Le système est prêt.**
