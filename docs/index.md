@@ -1,194 +1,239 @@
 ---
 layout: default
-title: SAE501 - Architecture Wi-Fi Sécurisée Multi-Sites
+title: SAE501 - Architecture Wi-Fi Sécurisée
 ---
 
-# 💪 SAE501 - Architecture Wi-Fi Sécurisée Multi-Sites
+# 💫 SAE501 - Architecture Wi-Fi Sécurisée Multi-Sites
 
-**Système complet d'authentification RADIUS Enterprise avec Wazuh monitoring**
+## Bienvenue!
+
+SAE501 est une **infrastructure d'authentification RADIUS sécurisée** pour WPA-Enterprise.
+
+### 🌟 Objectifs
+
+- 💫 Authentification centralisée (PEAP-MSCHAPv2)
+- 👎 Gestion d'utilisateurs facile
+- 📊 Monitoring en temps réel
+- 🔐 Logs d'audit complets
+- ⚡ Installation 5-10 minutes
+
+---
 
 ## 🚀 Démarrage rapide
 
+### Installation automatisée (recommandé)
+
 ```bash
-# Installation complète en 1 commande (5-10 minutes)
+git clone https://github.com/sfrayan/SAE501.git
+cd SAE501
+sudo bash scripts/install_all.sh
+```
+
+**Durée**: 15-20 minutes
+
+### Vérification
+
+```bash
+bash scripts/test_installation.sh
+bash scripts/show_credentials.sh
+```
+
+---
+
+## 💻 Composants
+
+| Composant | Port | Rôle |
+|-----------|------|------|
+| **FreeRADIUS** | 1812/1813 | Authentification |
+| **PHP-Admin** | 80/443 | Interface de gestion |
+| **MySQL** | 3306 | Base de données |
+| **Wazuh** | 5601/55000 | Monitoring |
+
+---
+
+## 📁 Documentation complète
+
+Pour le guide complet **étape par étape**:
+
+👉 **[Lire le README.md](https://github.com/sfrayan/SAE501#readme)**
+
+Le README inclut:
+- Pré-requis système
+- 9 étapes d'installation
+- Configuration du routeur
+- Gestion des utilisateurs
+- Sécurité et maintenance
+- Dépannage
+
+---
+
+## 📚 Fichiers de documentation
+
+### Architecture
+- [Dossier d'architecture](dossier-architecture.md) - Vue technique complète
+- [Hardening Linux](hardening-linux.md) - Sécurité rénforcée
+- [Journal de bord](journal-de-bord.md) - Avancements du projet
+
+---
+
+## 🛠️ Accès rapides
+
+### Interfaces web
+
+```
+PHP-Admin:     http://VOTRE_IP/admin
+Wazuh:         https://VOTRE_IP:5601
+```
+
+### Identifiants par défaut
+
+```bash
+# Afficher tous les accès créés
+bash scripts/show_credentials.sh
+```
+
+### Commandes essentielles
+
+```bash
+# Installation
 sudo bash scripts/install_all.sh
 
-# Voir tous les accès
+# Tests
+bash scripts/test_installation.sh
+
+# Vérification
 bash scripts/show_credentials.sh
 
-# Tester l'installation
+# Diagnostics
+bash scripts/diagnostics.sh
+```
+
+---
+
+## ✅ Status
+
+- ✅ Installation: **5-10 minutes**
+- ✅ Pages PHP: **7/7 complètes**
+- ✅ Scripts: **8 automatisés**
+- ✅ Tests: **10 catégories**
+- ✅ Production-ready: **95%**
+
+---
+
+## 🚇 Support
+
+### Problèmes?
+
+```bash
+# Diagnostics complets
+bash scripts/diagnostics.sh
+
+# Vérifier l'état
 bash scripts/test_installation.sh
+
+# Voir les logs
+sudo tail -f /var/log/freeradius/radius.log
 ```
 
-## 📋 Documentation
+### Documentation technique
 
-- **[QUICKSTART.md](../QUICKSTART.md)** - Démarrage en 5 minutes 🚀
-- **[README_FINAL.md](../README_FINAL.md)** - Documentation complète 📚
-- **[MODIFICATIONS_EFFECTUEES.md](../MODIFICATIONS_EFFECTUEES.md)** - Ce qui a été fait 📋
+Voir [dossier-architecture.md](dossier-architecture.md) pour:
+- Schémas d'architecture
+- Flux d'authentification
+- Scénarios de dépannage
 
-### Architecture technique
+---
 
-- **[dossier-architecture.md](dossier-architecture.md)** - Architecture détaillée
-- **[hardening-linux.md](hardening-linux.md)** - Sécurité renforcée
-- **[journal-de-bord.md](journal-de-bord.md)** - Journal de développement
+## 📋 Guide complet
 
-## ✅ Fonctionnalités
+### ÉTAPE 1: Préparation
+- Créer une VM (4GB RAM, 2 CPU, 50GB disque)
+- Installer Debian 12+ ou Ubuntu 22.04+
+- Vérifier connexion internet
 
-✅ **FreeRADIUS** - Authentification Enterprise WPA2/WPA3
-✅ **PHP-Admin** - Interface de gestion intuitive
-✅ **Wazuh** - Monitoring et alertes sécurité
-✅ **MySQL** - Base de données sécurisée
-✅ **Logs d'audit** - Traçabilité complète
-✅ **Hardening** - Configuration renforcée
-✅ **Scripts automatisés** - Installation + tests
-✅ **Production-ready** - Prêt à 95%
-
-## 🔐 Accès aux interfaces
-
-### PHP-Admin (Gestion RADIUS)
-```
-URL: http://localhost/admin
-Utilisateur: admin
-Mot de passe: Admin@Secure123! (CHANGEZ-LE)
+### ÉTAPE 2: Installation
+```bash
+sudo bash scripts/install_all.sh
 ```
 
-### Wazuh Dashboard (Monitoring)
-```
-URL: http://localhost:5601
-Utilisateur: admin
-Mot de passe: SecurePassword123! (CHANGEZ-LE)
-```
-
-## 📈 Architecture
-
-```
-┌────────────────────────────────────────┐
-│           Clients Wi-Fi (WPA-Enterprise)         │
-└────────────┬───────────────────────────┘
-                      │
-┌────────────▼───────────────────────────┐
-│            Routeur (NAS RADIUS)                │
-└────────────┬───────────────────────────┘
-                      │ UDP:1812/1813
-┌────────────▼───────────────────────────┐
-│        SERVEUR SAE501 (Debian VM)            │
-│                                               │
-│  ┌───────────────────────────────┐  │
-│  │    FreeRADIUS (1812/1813)          │  │
-│  └────────────┬──────────────────┘  │
-│                 │                        │
-│  ┌──────────▼──────────┐  ┌──────────────┐  │
-│  │  MySQL DB              │  │  PHP-Admin       │  │
-│  └─────────────────────┘  └──────────────┘  │
-│                                               │
-│  ┌───────────────────────────────┐  │
-│  │  Wazuh (5601, 55000)                │  │
-│  │  - Monitoring réel                 │  │
-│  │  - Détection anomalies             │  │
-│  │  - Alertes sécurité                │  │
-│  └───────────────────────────────┘  │
-│                                               │
-└────────────────────────────────────────┘
+### ÉTAPE 3: Vérification
+```bash
+bash scripts/test_installation.sh
+bash scripts/show_credentials.sh
 ```
 
-## 📈 Scripts disponibles
+### ÉTAPE 4: Configuration
+- Accéder PHP-Admin
+- Changer les mots de passe
+- Ajouter utilisateurs
+- Configurer routeur
 
-| Script | Description | Durée |
-|--------|-------------|--------|
-| `install_all.sh` | Installation complète 🚀 **RECOMMANDÉ** | 15-20 min |
-| `install_radius.sh` | FreeRADIUS uniquement | 5 min |
-| `install_php_admin.sh` | Interface web uniquement | 3 min |
-| `install_wazuh.sh` | Monitoring Wazuh uniquement | 10 min |
-| `install_hardening.sh` | Sécurité renforcée | 2 min |
-| `diagnostics.sh` | Tests de connectivité | 1 min |
-| `show_credentials.sh` | Afficher accès | 30 sec |
-| `test_installation.sh` | Tests complets | 2 min |
+### ÉTAPE 5: Maintenance
+- Consulter logs d'audit
+- Monitorer Wazuh
+- Sauvegarder la base de données
+
+---
 
 ## 🔐 Sécurité
 
-### Implémenté
+### AVANT PRODUCTION
 
-✅ **PEAP-MSCHAPv2** - Authentification sans certificat client
-✅ **Mots de passe hashés** - Jamais stockés en clair
-✅ **Logs d'audit** - Toutes les actions enregistrées
-✅ **Firewall UFW** - Règles strictes
-✅ **Fail2Ban** - Protection brute-force
-✅ **AppArmor** - Sandboxing services
-✅ **SSH renforcé** - Pas de password, clés uniquement
-✅ **Monitoring Wazuh** - Détection anomalies
-
-### En production
-
-⚠️ **OBLIGATOIRE**:
 - [ ] Changez TOUS les mots de passe
 - [ ] Générez certificats SSL/TLS
 - [ ] Activez HTTPS partout
-- [ ] Testez les sauvegardes
+- [ ] Configurez firewall UFW
+- [ ] Testez sauvegardes
 
-## 🧪 Tests
+### Bonnes pratiques
 
 ```bash
-# Tests automatisés après installation
-bash scripts/test_installation.sh
+# Firewall
+sudo ufw enable
+sudo ufw allow 22/tcp      # SSH
+sudo ufw allow 80/tcp      # HTTP
+sudo ufw allow 443/tcp     # HTTPS
+sudo ufw allow 1812/udp    # RADIUS
+sudo ufw allow 5601/tcp    # Wazuh
 
-# Affiche:
-# ✅ 10/10 tests réussis
-# ✅ Système prêt pour utilisation
+# Sauvegardes
+mysqldump -u root -p radius > backup.sql
 ```
 
-## 📊 Support
+---
 
-**En cas de problème**:
+## 📊 Statistiques
 
-1. Vérifiez les logs
-   ```bash
-   bash scripts/diagnostics.sh
-   ```
-
-2. Consultez la documentation
-   - `QUICKSTART.md` - Début
-   - `README_FINAL.md` - Complet
-   - `docs/` - Technique
-
-3. Tests manuels
-   ```bash
-   radtest user password localhost 0 secret
-   ```
-
-## 🏗️ Pré-requis
-
-- **OS**: Debian 12+ ou Ubuntu 22.04+
-- **RAM**: 4GB minimum (8GB recommandé)
-- **CPU**: 2 cores
-- **Disque**: 50GB minimum
-- **Accès root** pour installation
-
-## 📈 Performance
-
-- **Authentifications/sec**: 100+
-- **Temps de réponse**: < 100ms
-- **Connexions simultanes**: 1000+
-- **Mémoire (idle)**: ~500MB
-- **CPU (idle)**: < 5%
-
-## 📄 Licence
-
-Projet SAE501 - Sorbonne Paris Nord
-
-Utilise logiciels open-source:
-- FreeRADIUS (GPLv2)
-- Wazuh (GPLv2)
-- Debian (Libre)
-- MySQL (GPLv2)
+| Métrique | Valeur |
+|----------|--------|
+| Fichiers PHP | 7 |
+| Scripts | 8 |
+| Tests automatisés | 10+ |
+| Temps installation | 5-10 min |
+| Production-readiness | 95% |
 
 ---
 
-**🚀 Prêt? Commencez par**: `sudo bash scripts/install_all.sh`
+## 🔗 Liens
 
-**📋 Documentation**: [QUICKSTART.md](../QUICKSTART.md)
-
-**🏗️ Architecture**: [dossier-architecture.md](dossier-architecture.md)
+- 📖 **[README complet](https://github.com/sfrayan/SAE501#readme)**
+- 💻 **[GitHub Repository](https://github.com/sfrayan/SAE501)**
+- 📊 **[Architecture document](dossier-architecture.md)**
+- 🔐 **[Security guide](hardening-linux.md)**
 
 ---
 
-*Dernière mise à jour: 23 janvier 2026 - Version 1.0.0*
+## 🌟 Prêt?
+
+```bash
+git clone https://github.com/sfrayan/SAE501.git
+cd SAE501
+sudo bash scripts/install_all.sh
+```
+
+**Bienvenue dans SAE501! 🚀**
+
+---
+
+*Architecture Wi-Fi Sécurisée - Projet SAE*
+*Dernière mise à jour: 23 janvier 2026*
