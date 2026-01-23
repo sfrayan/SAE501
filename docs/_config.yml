@@ -1,0 +1,42 @@
+# GitHub Pages Jekyll Configuration
+
+title: SAE501 - Architecture Wi-Fi Sécurisée Multi-Sites
+description: Installation et déploiement RADIUS sécurisé
+url: https://sfrayan.github.io
+baseurl: /SAE501
+
+# Theme
+theme: jekyll-theme-slate
+
+# Navigation
+navigation:
+  - name: Home
+    url: /
+  - name: Installation
+    url: /installation
+  - name: Configuration
+    url: /configuration
+  - name: Security
+    url: /security
+
+# Markdown
+markdown: kramdown
+
+# Collections
+collections:
+  docs:
+    output: true
+    permalink: /:path/
+
+# Plugins
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+
+# Exclude
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor/bundle
