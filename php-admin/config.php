@@ -1,202 +1,228 @@
 <?php
 /**
- * config.php - Configuration de l'application PHP-Admin RADIUS
- *
- * Fichier: php-admin/config.php
- * Auteur: GroupeNani
- * Date: 4 janvier 2026
- *
- * Description:
- *   Configuration centralisée pour l'application de gestion des utilisateurs RADIUS.
- *   Contient les identifiants de connexion à la base de données MySQL.
- *
- * Utilisation:
- *   Inclus automatiquement par les autres fichiers PHP
- *   À protéger: chmod 640 + .htaccess
- *
- * Sécurité:
- *   - Ne JAMAIS commiter avec vrais identifiants en production
- *   - Utiliser variables d'environnement en production
- *   - Protéger ce fichier avec .htaccess
+ * SAE501 - Configuration sécurisée
+ * Gestion des comptes RADIUS avec interface web
+ * 
+ * SECURITE: 
+ * - Variables sensibles chargées depuis /opt/sae501/secrets/db.env
+ * - Pas de credentials en clair dans le code
+ * - Validated & prepared statements partout
+ * - Rate limiting implémenté
+ * - Audit logging activé
  */
 
-// ============================================
-// CONFIGURATION BASE DE DONNÉES RADIUS
-// ============================================
+// ============================================================================
+// CONFIGURATION DE SECURITE
+// ============================================================================
 
-// Serveur MySQL
-define('DB_HOST', 'localhost');
+// Charger les variables d'environnement depuis le fichier sécurisé
+$env_file = '/opt/sae501/secrets/db.env';
+if (!file_exists($env_file)) {
+    die('ERREUR: Fichier de configuration introuvable. Vérifiez /opt/sae501/secrets/db.env');
+}
 
-// Port MySQL (3306 par défaut)
-define('DB_PORT', 3306);
+$env = parse_ini_file($env_file);
+if (!$env) {
+    die('ERREUR: Impossible de charger la configuration');
+}
 
-// Base de données
-define('DB_NAME', 'radius');
+// ============================================================================
+// CONFIGURATION BASE DE DONNEES
+// ============================================================================
 
-// Utilisateur MySQL (créé par init_appuser.sql)
-define('DB_USER', 'radius_app');
+$db_config = [
+    'host'   => $env['DB_HOST'] ?? 'localhost',
+    'port'   => $env['DB_PORT'] ?? 3306,
+    'name'   => $env['DB_NAME'] ?? 'radius',
+    'user'   => $env['DB_USER_PHP'] ?? 'sae501_php',
+    'pass'   => $env['DB_PASSWORD_PHP'] ?? '',
+];
 
-// Mot de passe MySQL
-define('DB_PASS', 'RadiusAppPass!2026');
-
-// Charset
-define('DB_CHARSET', 'utf8mb4');
-
-// ============================================
+// ============================================================================
 // CONFIGURATION APPLICATION
-// ============================================
+// ============================================================================
 
-// Titre de l'application
-define('APP_TITLE', 'SAE 5.01 - Gestionnaire Utilisateurs RADIUS');
+define('APP_NAME', 'SAE501 - Admin RADIUS');
+define('APP_VERSION', '1.0.0');
+define('APP_ENV', getenv('APP_ENV') ?: 'production');
 
-// Version
-define('APP_VERSION', '1.0');
+// Session configuration
+ini_set('session.http_only', 1);
+ini_set('session.secure', (bool)getenv('HTTPS'));
+ini_set('session.same_site', 'Strict');
+ini_set('session.gc_maxlifetime', 3600); // 1 hour
+ini_set('session.cookie_lifetime', 0);   // Session cookie
 
-// URL de base
-define('APP_BASE_URL', 'http://192.168.10.254/php-admin/');
+// Session name
+session_name('SAE501_SESSION');
 
-// Fuseau horaire
-define('TIMEZONE', 'Europe/Paris');
+// ============================================================================
+// CONFIGURATION AUDIT
+// ============================================================================
 
-// ============================================
-// CONFIGURATION SÉCURITÉ
-// ============================================
+define('AUDIT_LOG_FILE', '/var/log/sae501/php_admin_audit.log');
+define('ENABLE_AUDIT_LOGGING', true);
+define('ENABLE_RATE_LIMITING', true);
+define('MAX_ATTEMPTS_PER_MINUTE', 10);
 
-// Activer mode debug (false en production)
-define('DEBUG_MODE', false);
+// ============================================================================
+// CONFIGURATION WAZUH (optionnel)
+// ============================================================================
 
-// Longueur minimum mot de passe
-define('MIN_PASSWORD_LENGTH', 8);
+define('WAZUH_ENABLED', false);
+define('WAZUH_API_URL', getenv('WAZUH_API_URL') ?: 'https://localhost:55000');
+define('WAZUH_API_USER', getenv('WAZUH_API_USER') ?: '');
+define('WAZUH_API_PASSWORD', getenv('WAZUH_API_PASSWORD') ?: '');
 
-// Pattern validation email
-define('EMAIL_PATTERN', '/^[a-zA-Z0-9._%+-]+@gym\.fr$/');
-
-// Nombre d'utilisateurs par page (pagination)
-define('USERS_PER_PAGE', 10);
-
-// ============================================
-// CONFIGURATION LOGGING
-// ============================================
-
-// Dossier logs
-define('LOG_DIR', '/var/log/php-admin/');
-
-// Activer logging
-define('ENABLE_LOGGING', true);
-
-// ============================================
+// ============================================================================
 // FONCTIONS UTILITAIRES
-// ============================================
+// ============================================================================
 
 /**
- * Récupère la connexion à la base de données
- * @return PDO|null Connexion PDO ou null en cas d'erreur
+ * Connecter à la base de données
  */
-function get_db_connection() {
+function db_connect() {
+    global $db_config;
+    
     try {
-        $dsn = 'mysql:host=' . DB_HOST . ':' . DB_PORT . ';dbname=' . DB_NAME . ';charset=' . DB_CHARSET;
-        $pdo = new PDO($dsn, DB_USER, DB_PASS);
-        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        $dsn = sprintf(
+            'mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4',
+            $db_config['host'],
+            $db_config['port'],
+            $db_config['name']
+        );
+        
+        $pdo = new PDO(
+            $dsn,
+            $db_config['user'],
+            $db_config['pass'],
+            [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ]
+        );
+        
         return $pdo;
     } catch (PDOException $e) {
-        log_error('Erreur connexion DB: ' . $e->getMessage());
-        if (DEBUG_MODE) {
-            die('Erreur connexion: ' . $e->getMessage());
-        }
+        error_log('DB Connection Error: ' . $e->getMessage());
         die('Erreur de connexion à la base de données');
     }
 }
 
 /**
- * Enregistre un message dans les logs
- * @param string $level Niveau (ERROR, WARNING, INFO)
- * @param string $message Message à enregistrer
+ * Enregistrer une action dans les logs d'audit
  */
-function log_message($level, $message) {
-    if (!ENABLE_LOGGING) return;
+function audit_log($action, $target_user = '', $details = '', $status = 'success') {
+    if (!ENABLE_AUDIT_LOGGING) return;
     
-    if (!is_dir(LOG_DIR)) {
-        mkdir(LOG_DIR, 0755, true);
+    $timestamp = date('Y-m-d H:i:s');
+    $user = $_SESSION['admin_user'] ?? 'unknown';
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    
+    $log_entry = sprintf(
+        "[%s] User: %s | Action: %s | Target: %s | IP: %s | Status: %s | Details: %s\n",
+        $timestamp,
+        $user,
+        $action,
+        $target_user,
+        $ip,
+        $status,
+        $details
+    );
+    
+    file_put_contents(AUDIT_LOG_FILE, $log_entry, FILE_APPEND);
+    
+    // Also log to syslog
+    syslog(LOG_NOTICE, "SAE501 Admin: $action for $target_user from $ip");
+}
+
+/**
+ * Vérifier le rate limiting
+ */
+function check_rate_limit($identifier) {
+    if (!ENABLE_RATE_LIMITING) return true;
+    
+    $cache_key = "rate_limit_$identifier";
+    $file = "/tmp/sae501_$cache_key";
+    
+    if (file_exists($file)) {
+        $data = json_decode(file_get_contents($file), true);
+        $timestamp = time();
+        
+        // Reset counter after 1 minute
+        if ($timestamp - $data['start_time'] > 60) {
+            unlink($file);
+            return true;
+        }
+        
+        if ($data['count'] >= MAX_ATTEMPTS_PER_MINUTE) {
+            audit_log('rate_limit_exceeded', $identifier, 'Trop de tentatives', 'failure');
+            return false;
+        }
+        
+        $data['count']++;
+        file_put_contents($file, json_encode($data));
+    } else {
+        file_put_contents($file, json_encode([
+            'start_time' => time(),
+            'count' => 1
+        ]));
     }
     
-    $log_file = LOG_DIR . date('Y-m-d') . '.log';
-    $timestamp = date('Y-m-d H:i:s');
-    $log_entry = "[$timestamp] [$level] $message\n";
-    
-    file_put_contents($log_file, $log_entry, FILE_APPEND);
+    return true;
 }
 
 /**
- * Enregistre une erreur
+ * Valider l'input utilisateur
  */
-function log_error($message) {
-    log_message('ERROR', $message);
+function validate_username($username) {
+    if (empty($username)) return false;
+    if (strlen($username) < 3 || strlen($username) > 64) return false;
+    // Only allow alphanumeric, dots, hyphens, underscores
+    return preg_match('/^[a-zA-Z0-9._-]+$/', $username) === 1;
+}
+
+function validate_password($password) {
+    if (empty($password)) return false;
+    if (strlen($password) < 8) return false; // Minimum 8 characters
+    // Password must contain at least one uppercase, one number, one special char
+    $pattern = '/^(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^&*])/';
+    return preg_match($pattern, $password) === 1;
 }
 
 /**
- * Enregistre un avertissement
+ * Hasher un mot de passe RADIUS (NT-Hash pour MSCHAP)
  */
-function log_warning($message) {
-    log_message('WARNING', $message);
+function generate_nt_password_hash($password) {
+    // Convert password to UTF-16LE
+    $password_utf16 = iconv('UTF-8', 'UTF-16LE', $password);
+    // Generate MD4 hash
+    return strtoupper(hash('md4', $password_utf16));
 }
 
 /**
- * Enregistre une info
+ * Gérer les erreurs et exceptions
  */
-function log_info($message) {
-    log_message('INFO', $message);
+set_error_handler(function($errno, $errstr, $errfile, $errline) {
+    error_log("PHP Error: $errstr in $errfile:$errline");
+    if (APP_ENV === 'development') {
+        echo "<pre>Erreur: $errstr</pre>";
+    }
+    return true;
+});
+
+// ============================================================================
+// INIT SESSION & SECURITE
+// ============================================================================
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
 }
 
-/**
- * Échappe une chaîne pour éviter injection HTML
- */
-function escape_html($text) {
-    return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
+// CSRF Token
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-
-/**
- * Valide le format email RADIUS (username@gym.fr)
- */
-function is_valid_email($email) {
-    return preg_match(EMAIL_PATTERN, $email) === 1;
-}
-
-/**
- * Valide la force du mot de passe
- */
-function is_valid_password($password) {
-    return strlen($password) >= MIN_PASSWORD_LENGTH;
-}
-
-/**
- * Configure le fuseau horaire
- */
-date_default_timezone_set(TIMEZONE);
-
-// ============================================
-// NOTES SÉCURITÉ
-// ============================================
-
-/*
- * EN PRODUCTION:
- * 1. Utiliser variables d'environnement:
- *    define('DB_USER', getenv('DB_USER'));
- *    define('DB_PASS', getenv('DB_PASS'));
- *
- * 2. Protéger ce fichier:
- *    chmod 640 /var/www/html/php-admin/config.php
- *
- * 3. Ajouter .htaccess:
- *    <Files "config.php">
- *        Order Allow,Deny
- *        Deny from all
- *    </Files>
- *
- * 4. HTTPS obligatoire
- *
- * 5. Authentification admin requise
- *
- * 6. Logs audit détaillés
- */
 
 ?>
