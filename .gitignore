@@ -1,0 +1,36 @@
+# Environment variables & secrets
+.env
+.env.local
+secrets/
+*.key
+*.pem
+*.crt
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# PHP
+vendor/
+composer.lock
+.cache/
+
+# System
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Credentials
+config.php
+passwords.txt
+*_credentials.*
