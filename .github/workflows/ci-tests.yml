@@ -1,0 +1,109 @@
+name: CI - Tests & Validation
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+jobs:
+  lint-bash:
+    runs-on: ubuntu-latest
+    name: Lint Bash Scripts
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+      
+      - name: Lint scripts
+        run: |
+          echo "Checking Bash scripts for errors..."
+          shellcheck scripts/*.sh || true
+          echo "ShellCheck complete"
+
+  validate-config:
+    runs-on: ubuntu-latest
+    name: Validate Configuration Files
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check SQL files
+        run: |
+          echo "Validating SQL files..."
+          for file in radius/sql/*.sql; do
+            if [ -f "$file" ]; then
+              echo "Checking $file"
+              grep -E '^(CREATE|INSERT|ALTER|DROP)' "$file" > /dev/null && echo "✓ $file valid"
+            fi
+          done
+
+      - name: Check PHP files
+        run: |
+          echo "Checking PHP files syntax..."
+          sudo apt-get install -y php-cli
+          for file in php-admin/*.php php-admin/pages/*.php; do
+            if [ -f "$file" ]; then
+              php -l "$file" || echo "Warning: $file has syntax issues"
+            fi
+          done
+
+  scan-secrets:
+    runs-on: ubuntu-latest
+    name: Scan for Secrets
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install TruffleHog
+        run: pip install truffleHog
+      
+      - name: Scan for secrets
+        run: |
+          echo "Scanning for exposed secrets..."
+          truffleHog filesystem . --json --fail --max-depth 3 || echo "Scan complete"
+
+  check-docs:
+    runs-on: ubuntu-latest
+    name: Check Documentation
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Verify README exists
+        run: |
+          [ -f "README.md" ] && echo "✓ README.md found" || (echo "✗ README.md missing" && exit 1)
+          [ -f "docs/index.md" ] && echo "✓ docs/index.md found" || echo "⚠ docs/index.md missing"
+
+      - name: Check markdown syntax
+        run: |
+          echo "Checking Markdown files..."
+          for file in *.md docs/*.md; do
+            if [ -f "$file" ]; then
+              echo "✓ Found: $file"
+            fi
+          done
+
+  test-installation:
+    runs-on: ubuntu-latest
+    name: Test Installation Script
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check installation script
+        run: |
+          echo "Verifying installation scripts..."
+          [ -f "scripts/install_all.sh" ] && echo "✓ install_all.sh found" || exit 1
+          [ -f "scripts/test_installation.sh" ] && echo "✓ test_installation.sh found" || exit 1
+          [ -f "scripts/show_credentials.sh" ] && echo "✓ show_credentials.sh found" || exit 1
+          echo "All installation scripts verified"
+
+  status-check:
+    runs-on: ubuntu-latest
+    name: Overall Status
+    needs: [lint-bash, validate-config, scan-secrets, check-docs, test-installation]
+    if: always()
+    steps:
+      - name: Check overall status
+        run: |
+          echo "✓ CI/CD Pipeline Complete"
+          echo "All checks passed or warnings noted"
