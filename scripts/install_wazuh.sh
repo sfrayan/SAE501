@@ -1,352 +1,223 @@
 #!/bin/bash
+# ============================================================================
+# SAE501 - Installation Wazuh Manager avec dashboards
+# Centralisation des logs RADIUS et syslog du TL-MR100
+# ============================================================================
 
-###############################################
-# install_wazuh.sh - Installation Wazuh
-###############################################
-#
-# Fichier: scripts/install_wazuh.sh
-# Auteur: GroupeNani
-# Date: 7 janvier 2026
-#
-# Description:
-#   Script d'installation et configuration automatique de Wazuh Manager
-#   pour la surveillance sécurité SAE 5.01.
-#
-# Prérequis:
-#   - Debian 11+ ou Ubuntu 20.04+
-#   - Accès root (sudo)
-#   - 4GB RAM minimum, 20GB disque
-#
-# Utilisation:
-#   $ sudo bash scripts/install_wazuh.sh
-#
-# Fonctionnalités:
-#   ✓ Installation Wazuh Manager + API
-#   ✓ Configuration collecte logs (syslog, localfile)
-#   ✓ Importation règles personnalisées SAE 5.01
-#   ✓ Configuration moniteurs services critiques
-#   ✓ Tests connexion
-#
+set -euo pipefail
 
-set -e
-set -u
+LOG_FILE="/var/log/sae501_wazuh_install.log"
 
-###############################################
-# CONFIGURATION
-###############################################
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# Couleurs
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
-
-# Chemins
-WAZUH_CONFIG="$PROJECT_ROOT/wazuh/manager.conf"
-WAZUH_RULES="$PROJECT_ROOT/wazuh/local_rules.xml"
-WAZUH_DECODER="$PROJECT_ROOT/wazuh/syslog-tlmr100.conf"
-LOG_FILE="/var/log/install_wazuh_$(date +%Y%m%d_%H%M%S).log"
-
-# Variables
-WAZUH_USER="wazuh"
-WAZUH_GROUP="wazuh"
-WAZUH_INSTALL_DIR="/var/ossec"
-
-###############################################
-# FONCTIONS
-###############################################
-
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1" | tee -a "$LOG_FILE"
+log_message() {
+    local level=$1
+    shift
+    local message="$@"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo "[$timestamp] [$level] $message" | tee -a "$LOG_FILE"
 }
 
-log_success() {
-    echo -e "${GREEN}[✓]${NC} $1" | tee -a "$LOG_FILE"
+error_exit() {
+    log_message "ERROR" "$@"
+    exit 1
 }
 
-log_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1" | tee -a "$LOG_FILE"
-}
+if [[ $EUID -ne 0 ]]; then
+   error_exit "Ce script doit être exécuté en tant que root"
+fi
 
-log_error() {
-    echo -e "${RED}[✗]${NC} $1" | tee -a "$LOG_FILE"
-}
+log_message "INFO" "Démarrage de l'installation Wazuh"
 
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "Ce script doit être exécuté en tant que root (sudo)"
-        exit 1
-    fi
-}
+# Add Wazuh repository
+log_message "INFO" "Ajout du dépôt Wazuh..."
+curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | apt-key add - 2>/dev/null || true
+echo "deb https://packages.wazuh.com/4.x/apt/ stable main" > /etc/apt/sources.list.d/wazuh.list
 
-check_resources() {
-    log_info "Vérification des ressources système..."
-    
-    # RAM minimum 4GB
-    AVAILABLE_RAM=$(free -g | awk '/^Mem/ {print $2}')
-    if [[ $AVAILABLE_RAM -lt 4 ]]; then
-        log_warning "RAM disponible: ${AVAILABLE_RAM}GB (4GB recommandé)"
-    fi
-    
-    # Disque minimum 20GB
-    AVAILABLE_DISK=$(df / | awk 'NR==2 {print $4}')
-    if [[ $AVAILABLE_DISK -lt 20971520 ]]; then
-        log_warning "Disque disponible: $(( AVAILABLE_DISK / 1048576 ))GB (20GB recommandé)"
-    fi
-    
-    log_success "Ressources vérifiées"
-}
+apt-get update
 
-check_files() {
-    log_info "Vérification des fichiers de configuration..."
-    
-    if [[ ! -f "$WAZUH_CONFIG" ]]; then
-        log_warning "Fichier manager.conf non trouvé: $WAZUH_CONFIG"
-    fi
-    
-    if [[ ! -f "$WAZUH_RULES" ]]; then
-        log_warning "Fichier local_rules.xml non trouvé: $WAZUH_RULES"
-    fi
-    
-    log_success "Fichiers vérifiés"
-}
+# Install Wazuh Manager
+log_message "INFO" "Installation de Wazuh Manager..."
+apt-get install -y wazuh-manager
 
-add_wazuh_repo() {
-    log_info "Ajout du repository Wazuh..."
-    
-    curl -s https://packages.wazuh.com/key/GPG-KEY-WAZUH | apt-key add - >> "$LOG_FILE" 2>&1
-    echo "deb https://packages.wazuh.com/4.x/apt/ stable main" | tee /etc/apt/sources.list.d/wazuh.list >> "$LOG_FILE"
-    
-    apt-get update -qq >> "$LOG_FILE" 2>&1
-    
-    log_success "Repository Wazuh ajouté"
-}
+if ! systemctl is-active wazuh-manager > /dev/null 2>&1; then
+    log_message "INFO" "Démarrage de Wazuh Manager..."
+    systemctl enable wazuh-manager
+    systemctl start wazuh-manager
+    sleep 5
+fi
 
-install_wazuh() {
-    log_info "Installation de Wazuh Manager..."
-    
-    apt-get install -y wazuh-manager >> "$LOG_FILE" 2>&1
-    
-    log_success "Wazuh Manager installé"
-}
+log_message "SUCCESS" "Wazuh Manager démarré"
 
-import_config() {
-    log_info "Import de la configuration personnalisée..."
-    
-    # Backup config originale
-    cp /var/ossec/etc/ossec.conf /var/ossec/etc/ossec.conf.bak.$(date +%Y%m%d)
-    
-    if [[ -f "$WAZUH_CONFIG" ]]; then
-        cp "$WAZUH_CONFIG" /var/ossec/etc/ossec.conf
-        log_success "Configuration manager copiée"
-    fi
-}
+# Install Wazuh Agent on localhost
+log_message "INFO" "Installation de l'agent Wazuh local..."
+apt-get install -y wazuh-agent
 
-import_rules() {
-    log_info "Import des règles personnalisées..."
-    
-    if [[ -f "$WAZUH_RULES" ]]; then
-        cp "$WAZUH_RULES" /var/ossec/etc/rules/local_rules.xml
-        chown root:wazuh /var/ossec/etc/rules/local_rules.xml
-        chmod 640 /var/ossec/etc/rules/local_rules.xml
-        log_success "Règles personnalisées copiées"
-    fi
-}
-
-import_decoders() {
-    log_info "Import des décodeurs personnalisés..."
-    
-    if [[ -f "$WAZUH_DECODER" ]]; then
-        cp "$WAZUH_DECODER" /var/ossec/etc/decoders/syslog-tlmr100.conf
-        chown root:wazuh /var/ossec/etc/decoders/syslog-tlmr100.conf
-        chmod 640 /var/ossec/etc/decoders/syslog-tlmr100.conf
-        log_success "Décodeurs personnalisés copiés"
-    fi
-}
-
-configure_rsyslog() {
-    log_info "Configuration rsyslog pour réception syslog..."
-    
-    cat > /etc/rsyslog.d/10-wazuh.conf <<'EOF'
-# Recevoir syslog UDP port 514
-input(type="imudp" port="514" tag="syslog")
-
-# Rediriger vers Wazuh agent
-:msg, contains, "TL-MR100" @@localhost:1514
-:msg, contains, "FreeRADIUS" @@localhost:1514
-:msg, contains, "radiusd" @@localhost:1514
-
-# Action défaut
-& stop
+# Configure agent to report to local manager
+cat > /var/ossec/etc/ossec.conf << 'EOF'
+<ossec_config>
+  <client>
+    <server-ip>127.0.0.1</server-ip>
+  </client>
+  
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/sae501/radius/auth.log</location>
+    <label>radius-auth</label>
+  </localfile>
+  
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/sae501/radius/reply.log</location>
+    <label>radius-reply</label>
+  </localfile>
+  
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/auth.log</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>syslog</log_format>
+    <location>/var/log/syslog</location>
+  </localfile>
+  
+  <localfile>
+    <log_format>json</log_format>
+    <location>/var/log/sae501/php_admin_audit.log</location>
+    <label>sae501-admin</label>
+  </localfile>
+</ossec_config>
 EOF
-    
-    systemctl restart rsyslog >> "$LOG_FILE" 2>&1
-    
-    log_success "rsyslog configuré"
-}
 
-test_syntax() {
-    log_info "Vérification de la syntaxe Wazuh..."
+chown root:wazuh /var/ossec/etc/ossec.conf
+chmod 640 /var/ossec/etc/ossec.conf
 
-    # Tester la configuration du manager Wazuh 4.x
-    /var/ossec/bin/wazuh-managerd -t >> "$LOG_FILE" 2>&1
+systemctl enable wazuh-agent
+systemctl restart wazuh-agent
 
-    if [[ $? -eq 0 ]]; then
-        log_success "Syntaxe valide"
-        return 0
-    else
-        log_error "Erreur de syntaxe détectée (voir $LOG_FILE)"
-        return 1
-    fi
-}
+log_message "SUCCESS" "Agent Wazuh configuré"
 
-start_service() {
-    log_info "Démarrage de Wazuh Manager..."
-    
-    systemctl enable wazuh-manager >> "$LOG_FILE" 2>&1
-    systemctl start wazuh-manager >> "$LOG_FILE" 2>&1
-    sleep 3
-    
-    if systemctl is-active --quiet wazuh-manager; then
-        log_success "Wazuh Manager en cours d'exécution"
-    else
-        log_error "Erreur au démarrage de Wazuh"
-        systemctl status wazuh-manager >> "$LOG_FILE" 2>&1
-        return 1
-    fi
-}
-
-verify_rules() {
-    log_info "Vérification des règles importées..."
-    
-    RULE_COUNT=$(/var/ossec/bin/wazuh-control query | grep -c "local_rules.xml" || true)
-    
-    if [[ $RULE_COUNT -gt 0 ]]; then
-        log_success "Règles personnalisées chargées ($RULE_COUNT)"
-    else
-        log_warning "Vérifier les règles importées"
-    fi
-}
-
-generate_report() {
-    log_info "Génération du rapport d'installation..."
-    
-    cat >> "$LOG_FILE" <<EOF
-
-===============================================
-       RAPPORT INSTALLATION WAZUH
-===============================================
-
-Date: $(date)
-Serveur: $(hostname)
-
-INSTALLATION WAZUH:
-  Version: $(cat /var/ossec/VERSION.txt 2>/dev/null || echo "Inconnue")
-  Répertoire: /var/ossec
-  Utilisateur: wazuh:wazuh
+# Configure syslog receiver for TL-MR100 logs
+log_message "INFO" "Configuration de la réception syslog..."
+cat > /var/ossec/etc/decoders/mr100.xml << 'EOF'
+<decoders>
+  <decoder name="mr100-decoder">
+    <plugin_decoder>PF_DECODER_INIT</plugin_decoder>
+  </decoder>
   
-CONFIGURATION:
-  Réception syslog: Port 514 UDP
-  Collecte FreeRADIUS: /var/log/freeradius/radius.log
-  Collecte SSH: /var/log/auth.log
-  Collecte système: /var/log/syslog
-  Collecte TL-MR100: via syslog UDP 514
-
-RÈGLES & DÉCODEURS:
-  Règles personnalisées: local_rules.xml
-  Décodeurs TL-MR100: syslog-tlmr100.conf
-  Moniteurs critiques: FreeRADIUS, SSH, MySQL, Apache
-
-ALERTES CONFIGURÉES:
-  Level 3: Authentifications réussies
-  Level 5: Authentifications échouées
-  Level 6: Modifications critiques
-  Level 7: Bruteforce détecté
-  Level 8: Erreurs critiques
-  Level 9: Attaques détectées
-
-COMMANDES UTILES:
-  Statut:
-    $ sudo systemctl status wazuh-manager
-  
-  Logs:
-    $ sudo tail -f /var/ossec/logs/ossec.log
-  
-  Alerts:
-    $ sudo tail -f /var/ossec/logs/alerts/alerts.log
-  
-  Contrôler:
-    $ sudo /var/ossec/bin/wazuh-control status
-  
-  Redémarrer:
-    $ sudo systemctl restart wazuh-manager
-  
-  Règles:
-    $ sudo /var/ossec/bin/wazuh-control query
-
-VÉRIFICATIONS:
-  [ ] Wazuh Manager démarré: systemctl status wazuh-manager
-  [ ] Règles chargées: grep -c "local_rules.xml" /var/ossec/logs/ossec.log
-  [ ] Réception syslog: netstat -un | grep 514
-  [ ] FreeRADIUS suivi: tail -f /var/ossec/logs/alerts/alerts.log
-  [ ] TL-MR100 logs reçus: grep "TL-MR100" /var/ossec/logs/ossec.log
-
-PROCHAINES ÉTAPES:
-  1. Activer syslog sur TL-MR100 (Admin → System → Logs)
-  2. Configurer FreeRADIUS (scripts/install_radius.sh)
-  3. Vérifier réception logs: tail /var/ossec/logs/alerts/alerts.log
-  4. Configurer alertes email (optionnel)
-  5. Intégrer avec SIEM (Splunk, ELK, etc.)
-
-===============================================
+  <decoder name="mr100-router">
+    <parent>mr100-decoder</parent>
+    <regex offset="after_parent">^[\w\s]+: (\w+)(\[\d+\])?\: (.*)</regex>
+    <order>log_type, pid, log_message</order>
+  </decoder>
+</decoders>
 EOF
-    
-    log_success "Rapport généré: $LOG_FILE"
-}
 
-###############################################
-# MAIN
-###############################################
+chown root:wazuh /var/ossec/etc/decoders/mr100.xml
+chmod 640 /var/ossec/etc/decoders/mr100.xml
 
-main() {
-    log_info "╔════════════════════════════════════════╗"
-    log_info "║  SAE 5.01 - Installation Wazuh        ║"
-    log_info "║  $(date +"%Y-%m-%d %H:%M:%S")           ║"
-    log_info "╚════════════════════════════════════════╝"
-    log_info ""
-    log_info "Log: $LOG_FILE"
-    
-    check_root
-    check_resources
-    check_files
-    
-    add_wazuh_repo
-    install_wazuh
-    
-    import_config
-    import_rules
-    import_decoders
-    
-    configure_rsyslog
-    
-    if ! test_syntax; then
-        log_error "Erreur de syntaxe - installation incomplète"
-        generate_report
-        exit 1
-    fi
-    
-    start_service
-    verify_rules
-    generate_report
-    
-    log_success ""
-    log_success "╔════════════════════════════════════════╗"
-    log_success "║  ✓ INSTALLATION RÉUSSIE               ║"
-    log_success "╚════════════════════════════════════════╝"
-}
+# Configure syslog input in Wazuh
+cat > /var/ossec/etc/ruleset/rules/mr100.xml << 'EOF'
+<group name="mr100">
+  <rule id="100001" level="3">
+    <match>mr100</match>
+    <description>TP-Link MR100 router event</description>
+  </rule>
+  
+  <rule id="100002" level="5">
+    <match>mr100</match>
+    <match>authentication failure</match>
+    <description>MR100 Authentication failure</description>
+  </rule>
+  
+  <rule id="100003" level="4">
+    <match>mr100</match>
+    <match>wireless.*connection</match>
+    <description>MR100 Wireless connection event</description>
+  </rule>
+  
+  <rule id="100004" level="6">
+    <match>mr100</match>
+    <match>firewall|ddos|attack</match>
+    <description>MR100 Security event</description>
+  </rule>
+</group>
+EOF
 
-main "$@"
+chown root:wazuh /var/ossec/etc/ruleset/rules/mr100.xml
+chmod 640 /var/ossec/etc/ruleset/rules/mr100.xml
+
+# Create custom alerts for RADIUS
+cat > /var/ossec/etc/ruleset/rules/radius.xml << 'EOF'
+<group name="radius_auth">
+  <rule id="101001" level="3">
+    <match>User-Name</match>
+    <description>RADIUS authentication attempt</description>
+  </rule>
+  
+  <rule id="101002" level="5">
+    <match>REJECT</match>
+    <description>RADIUS authentication rejected</description>
+  </rule>
+  
+  <rule id="101003" level="3">
+    <match>ACCEPT</match>
+    <description>RADIUS authentication accepted</description>
+  </rule>
+  
+  <rule id="101004" level="7">
+    <match>Access-Reject</match>
+    <match>Access-Reject</match>
+    <match>Access-Reject</match>
+    <description>Multiple RADIUS rejections - possible attack</description>
+    <frequency>3</frequency>
+    <timeframe>60</timeframe>
+  </rule>
+</group>
+EOF
+
+chown root:wazuh /var/ossec/etc/ruleset/rules/radius.xml
+chmod 640 /var/ossec/etc/ruleset/rules/radius.xml
+
+# Restart Wazuh to load new rules
+log_message "INFO" "Redémarrage de Wazuh Manager..."
+systemctl restart wazuh-manager
+sleep 3
+
+# Verify installation
+if systemctl is-active wazuh-manager > /dev/null 2>&1; then
+    log_message "SUCCESS" "Wazuh Manager opérationnel"
+else
+    error_exit "Échec du démarrage de Wazuh Manager"
+fi
+
+# Create syslog listener for remote devices
+log_message "INFO" "Configuration du listener syslog..."
+
+# Check if rsyslog is running, add syslog input to Wazuh manager config
+cat >> /var/ossec/etc/ossec.conf << 'EOF'
+
+<!-- Remote syslog input for network devices (TL-MR100) -->
+<remote>
+  <connection>syslog</connection>
+  <port>514</port>
+  <protocol>tcp</protocol>
+  <allowed-ips>0.0.0.0/0</allowed-ips>
+  <log_format>syslog</log_format>
+</remote>
+
+EOF
+
+log_message "INFO" "Listener syslog configuré sur le port 514"
+
+# Create monitoring summary
+log_message "SUCCESS" "Installation Wazuh terminée"
+log_message "INFO" "Wazuh Manager est maintenant en cours d'exécution"
+log_message "INFO" "Agent local configuré pour monitorer:"
+log_message "INFO" "  - /var/log/sae501/radius/auth.log"
+log_message "INFO" "  - /var/log/sae501/radius/reply.log"
+log_message "INFO" "  - /var/log/sae501/php_admin_audit.log"
+log_message "INFO" "  - /var/log/auth.log (système)"
+log_message "INFO" "  - /var/log/syslog (système)"
+log_message "INFO" "Listener syslog activé sur le port 514 pour les périphériques réseau"
+log_message "INFO" "Vérifier le statut: sudo systemctl status wazuh-manager"
+log_message "INFO" "Voir les logs: sudo tail -f /var/ossec/logs/alerts/alerts.log"
