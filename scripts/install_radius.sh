@@ -43,11 +43,16 @@ mkdir -p /var/lib/freeradius
 mkdir -p /var/log/freeradius
 mkdir -p /usr/var/run/radiusd
 
-# 5. Create COMPLETELY MINIMAL radiusd.conf (no virtual servers)
-log_msg "Creating radiusd.conf (ultra-minimal)..."
-cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
-# FreeRADIUS - Ultra-Minimal Configuration
-# Just listen on RADIUS ports, no processing
+# 5. Copy radiusd.conf from repo (or create if not found)
+log_msg "Copying radiusd.conf from repo..."
+if [[ -f /opt/SAE501/radius/radiusd.conf ]]; then
+    cp /opt/SAE501/radius/radiusd.conf /etc/freeradius/3.0/radiusd.conf
+    log_msg "radiusd.conf copied from repo"
+else
+    log_msg "radiusd.conf not found in repo, using inline template"
+    cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
+# FreeRADIUS Configuration File
+# SAE501 - Configuration pour environnement de production
 
 prefix = /usr
 exec_prefix = ${prefix}
@@ -63,28 +68,42 @@ thread pool {
     max_requests_per_worker = 0
 }
 
-listener {
+main {
+    pidfile = ${run_dir}/radiusd.pid
+    hostname_lookups = no
+    max_request_time = 30
+    cleanup_delay = 5
+    max_requests = 256
+    security {
+        max_attributes = 0
+        reject_delay = 0.000000
+        status_server = no
+        allow_core_dumps = no
+    }
+}
+
+listener auth {
     type = auth
     ipaddr = *
     port = 1812
     transport = udp
 }
 
-listener {
+listener acct {
     type = acct
     ipaddr = *
     port = 1813
     transport = udp
 }
 
-listener {
+listener auth_ipv6 {
     type = auth
     ipv6addr = ::
     port = 1812
     transport = udp
 }
 
-listener {
+listener acct_ipv6 {
     type = acct
     ipv6addr = ::
     port = 1813
@@ -93,32 +112,52 @@ listener {
 
 modules {
 }
+
+server default {
+    authorize {
+    }
+
+    authenticate {
+    }
+
+    preacct {
+    }
+
+    accounting {
+    }
+
+    session {
+    }
+
+    post-auth {
+    }
+
+    pre-proxy {
+    }
+
+    post-proxy {
+    }
+}
 RADIUSD_EOF
+fi
 
-log_msg "radiusd.conf created (ultra-minimal)"
-
-# 6. Create minimal clients.conf
-log_msg "Configuring clients.conf..."
-cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
-# FreeRADIUS Clients Configuration
-
+# 6. Copy clients.conf from repo
+log_msg "Copying clients.conf from repo..."
+if [[ -f /opt/SAE501/radius/clients.conf ]]; then
+    cp /opt/SAE501/radius/clients.conf /etc/freeradius/3.0/clients.conf
+    log_msg "clients.conf copied from repo"
+else
+    log_msg "Creating minimal clients.conf..."
+    cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
 client localhost {
     ipaddr = 127.0.0.1
     ipv6addr = ::1
     secret = testing123
-    require_message_authenticator = no
-    nastype = other
-}
-
-client 127.0.0.1 {
-    ipaddr = 127.0.0.1
-    secret = testing123
-    require_message_authenticator = no
+    shortname = localhost
     nastype = other
 }
 CLIENTS_EOF
-
-log_msg "clients.conf configured"
+fi
 
 # 7. Fix permissions
 log_msg "Fixing permissions..."
@@ -131,8 +170,8 @@ log_msg "Testing configuration..."
 if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 2>&1; then
     log_msg "Configuration test PASSED"
 else
-    log_msg "Configuration test FAILED - showing errors:"
-    cat /tmp/radius_config_test.log | head -30 | tee -a "$LOG_FILE"
+    log_msg "Configuration test FAILED - showing first 30 lines:"
+    head -30 /tmp/radius_config_test.log | tee -a "$LOG_FILE"
 fi
 
 # 9. Enable and start service
