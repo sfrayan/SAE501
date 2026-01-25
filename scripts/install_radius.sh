@@ -100,43 +100,33 @@ chmod 750 /etc/freeradius/3.0/certs
 chmod 640 /etc/freeradius/3.0/certs/*.crt /etc/freeradius/3.0/certs/*.key 2>/dev/null || true
 
 # ============================================================================
-# Configure EAP module to use our certificates
+# Configure EAP module for PEAP-MSCHAPv2 ONLY
 # ============================================================================
-log_message "INFO" "Configuration du module EAP avec les certificats..."
+log_message "INFO" "Configuration du module EAP (PEAP-MSCHAPv2)..."
 
-# Update eap module config
+# Update eap module config - simplified version
 sudo tee /etc/freeradius/3.0/mods-available/eap > /dev/null << 'EAPEOF'
 eap {
     default_eap_type = peap
     timer_expire = 60
-    ignore_unknown_eap_types = no
+    ignore_unknown_eap_types = yes
     cisco_accounting_username_bug = no
     max_sessions = 16384
+}
 
-    tls-config tls-common {
-        verify_depth = 0
-        ca_path = "/etc/freeradius/3.0/certs"
-        pem_file_type = yes
-        private_key_file = "/etc/freeradius/3.0/certs/server.key"
-        certificate_file = "/etc/freeradius/3.0/certs/server.crt"
-        ca_file = "/etc/freeradius/3.0/certs/ca.crt"
-        dh_file = "/etc/freeradius/3.0/certs/dh"
-        enable_legacy_ossl_provider = yes
-    }
+tls-config tls-common {
+    verify_depth = 0
+    ca_path = "/etc/freeradius/3.0/certs"
+    pem_file_type = yes
+    private_key_file = "/etc/freeradius/3.0/certs/server.key"
+    certificate_file = "/etc/freeradius/3.0/certs/server.crt"
+    ca_file = "/etc/freeradius/3.0/certs/ca.crt"
+    dh_file = "/etc/freeradius/3.0/certs/dh"
+}
 
-    tls {
-        tls = "tls-common"
-    }
-
-    ttls {
-        tls = "tls-common"
-        default_eap_type = mschapv2
-    }
-
-    peap {
-        tls = "tls-common"
-        default_eap_type = mschapv2
-    }
+peap {
+    tls = tls-common
+    default_eap_type = mschapv2
 }
 EAPEOF
 
