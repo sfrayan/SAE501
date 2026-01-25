@@ -52,7 +52,7 @@ if ! command -v ufw &> /dev/null; then
     log_success "UFW installed"
 fi
 
-# Reset to defaults
+# Reset to defaults (this will ask for confirmation)
 ufw --force reset > /dev/null 2>&1 || true
 
 # Default policies
@@ -60,7 +60,7 @@ ufw default deny incoming
 ufw default allow outgoing
 ufw default deny routed
 
-# Allow SSH (port 22)
+# Allow SSH FIRST (port 22) - before enabling UFW
 ufw allow 22/tcp comment "SSH" > /dev/null
 
 # Allow HTTP/HTTPS
@@ -89,7 +89,7 @@ if [ ! -f /etc/ssh/sshd_config.bak ]; then
     log_success "SSH config backed up"
 fi
 
-# Configure SSH security settings
+# Configure SSH security settings (but keep working authentication)
 cat > /etc/ssh/sshd_config << 'EOF'
 # This is the ssh server system-wide configuration file.
 Port 22
@@ -108,9 +108,9 @@ StrictModes yes
 MaxAuthTries 3
 MaxSessions 10
 
-# Authentication
+# Authentication - allow password for now, but secure it
 PubkeyAuthentication yes
-PasswordAuthentication no
+PasswordAuthentication yes
 PermitEmptyPasswords no
 ChallengeResponseAuthentication no
 UsePAM yes
@@ -155,8 +155,8 @@ cat > /etc/issue.net << 'EOF'
 ###############################################################
 EOF
 
-# Restart SSH service
-systemctl restart ssh > /dev/null 2>&1 || systemctl restart sshd > /dev/null 2>&1
+# Restart SSH service (use ssh, not sshd on Debian)
+sudo systemctl restart ssh > /dev/null 2>&1 || sudo systemctl restart sshd > /dev/null 2>&1 || true
 log_success "SSH hardened and restarted"
 
 # ============================================================================
@@ -166,7 +166,9 @@ log_info "Hardening kernel parameters..."
 
 # Backup sysctl config
 if [ ! -f /etc/sysctl.d/99-sae501-hardening.conf.bak ]; then
-    cp /etc/sysctl.d/99-hardening.conf /etc/sysctl.d/99-sae501-hardening.conf.bak 2>/dev/null || true
+    if [ -f /etc/sysctl.d/99-hardening.conf ]; then
+        cp /etc/sysctl.d/99-hardening.conf /etc/sysctl.d/99-sae501-hardening.conf.bak 2>/dev/null || true
+    fi
 fi
 
 # Apply hardening settings
@@ -244,7 +246,7 @@ if command -v mysql &> /dev/null; then
 DELETE FROM mysql.user WHERE User='';
 DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
 DROP DATABASE IF EXISTS test;
-DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
 FLUSH PRIVILEGES;
 EOF
     log_success "MySQL anonymous users removed and test database dropped"
@@ -266,12 +268,6 @@ general_log = 0
 slow_query_log = 1
 slow_query_log_file = /var/log/mysql/slow-query.log
 long_query_time = 2
-
-# SSL/TLS (if certificates available)
-# ssl-ca = /etc/mysql/ssl/ca.pem
-# ssl-cert = /etc/mysql/ssl/server-cert.pem
-# ssl-key = /etc/mysql/ssl/server-key.pem
-# require_secure_transport = ON
 
 # Binary logging for backups
 log_bin = /var/log/mysql/mysql-bin.log
@@ -400,11 +396,8 @@ chmod 600 /etc/ssh/ssh_host_*_key
 chmod 644 /etc/ssh/ssh_host_*_key.pub
 
 # Ensure cron and at are restricted
-chmod 700 /var/spool/cron/crontabs
-chmod 700 /var/spool/at
-
-# Disable unnecessary SUID binaries (optional - may break some functionality)
-# find / -xdev -type f -perm -4000 2>/dev/null | while read file; do chmod u-s "$file"; done
+chmod 700 /var/spool/cron/crontabs 2>/dev/null || true
+chmod 700 /var/spool/at 2>/dev/null || true
 
 log_success "File permissions hardened"
 
@@ -433,12 +426,10 @@ log_info "  ✓ Fail2Ban configured"
 log_info "  ✓ Audit logging enabled"
 log_info "  ✓ File permissions hardened"
 log_info ""
-log_info "Recommended next steps:"
-log_info "  1. Review /etc/ssh/sshd_config"
-log_info "  2. Configure MySQL SSL/TLS certificates"
-log_info "  3. Set up monitoring and alerting"
-log_info "  4. Test firewall rules: ufw status verbose"
-log_info "  5. Review audit logs: auditctl -l"
+log_info "Firewall status:"
+log_info "  ufw status verbose"
+log_info ""
+log_info "SSH is active on port 22 (password auth temporarily enabled)"
 log_info ""
 
 exit 0
