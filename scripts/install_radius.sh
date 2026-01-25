@@ -63,6 +63,38 @@ chown freerad:freerad "$RADIUS_LOG_DIR"
 chmod 750 "$RADIUS_LOG_DIR"
 
 # ============================================================================
+# Generate SSL certificates for EAP-TLS/PEAP
+# ============================================================================
+log_message "INFO" "Génération des certificats SSL pour EAP..."
+cd /etc/freeradius/3.0/certs
+
+# Only generate if they don't exist
+if [ ! -f "server.crt" ] || [ ! -f "server.key" ]; then
+    log_message "INFO" "Création des certificats..."
+    
+    # Create CA cert
+    openssl genrsa -out ca.key 2048 2>/dev/null || true
+    openssl req -new -x509 -days 3650 -key ca.key -out ca.crt -subj "/CN=SAE501-CA" 2>/dev/null || true
+    
+    # Create server cert
+    openssl genrsa -out server.key 2048 2>/dev/null || true
+    openssl req -new -key server.key -out server.csr -subj "/CN=localhost" 2>/dev/null || true
+    openssl x509 -req -days 3650 -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial -out server.crt 2>/dev/null || true
+    
+    # Create DH params
+    if [ ! -f "dh" ]; then
+        openssl dhparam -out dh 1024 2>/dev/null || true
+    fi
+    
+    chown freerad:freerad ca.key server.key dh
+    chmod 600 ca.key server.key dh
+    
+    log_message "SUCCESS" "Certificats SSL générés"
+else
+    log_message "SUCCESS" "Certificats SSL existants"
+fi
+
+# ============================================================================
 # Clean up conflicting modules
 # ============================================================================
 log_message "INFO" "Nettoyage des modules en conflit..."
