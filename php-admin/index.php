@@ -231,7 +231,7 @@ $action = $_GET['action'] ?? $_POST['action'] ?? 'dashboard';
             <a href="?action=add" class="<?php echo $action === 'add' ? 'active' : ''; ?>">Ajouter utilisateur</a>
             <a href="?action=list" class="<?php echo $action === 'list' ? 'active' : ''; ?>">Liste utilisateurs</a>
             <a href="?action=audit" class="<?php echo $action === 'audit' ? 'active' : ''; ?>">Logs d'audit</a>
-            <a href="?action=system" class="<?php echo $action === 'system' ? 'active' : ''; ?}">Système</a>
+            <a href="?action=system" class="<?php echo $action === 'system' ? 'active' : ''; ?>">Système</a>
             <a href="logout.php" style="float: right;">Déconnexion</a>
         </div>
         
