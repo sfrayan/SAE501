@@ -52,16 +52,13 @@ if [[ -f /opt/SAE501/radius/radiusd.conf ]]; then
 else
     log_msg "radiusd.conf not found in repo, using inline template"
     cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
-# FreeRADIUS Configuration File
-# SAE501 - Configuration minimaliste
-
+# FreeRADIUS Configuration - Minimal Valid Config
 prefix = /usr
 exec_prefix = ${prefix}
 installdir = ${exec_prefix}
 logdir = /var/log/freeradius
 raddbdir = /etc/freeradius/3.0
 localesdir = /usr/share/freeradius
-run_dir = /var/run/freeradius
 
 thread pool {
     num_networks = 1
@@ -71,11 +68,26 @@ thread pool {
 }
 
 main {
-    pidfile = ${run_dir}/radiusd.pid
+    name = "radiusd"
+    prefix = /usr
+    localstatedir = /var
+    sbindir = /usr/sbin
+    logdir = /var/log/freeradius
+    run_dir = /var/run/freeradius
+    libdir = /usr/lib
+    radacctdir = /var/log/freeradius/radacct
     hostname_lookups = no
     max_request_time = 30
     cleanup_delay = 5
     max_requests = 256
+    pidfile = /var/run/freeradius/radiusd.pid
+    checkrad = /usr/sbin/checkrad
+    log {
+        stripped_names = no
+        auth = no
+        auth_badpass = no
+        auth_goodpass = no
+    }
     security {
         max_attributes = 0
         reject_delay = 0.000000
@@ -84,59 +96,52 @@ main {
     }
 }
 
-listener auth {
-    type = auth
-    ipaddr = *
-    port = 1812
-    transport = udp
-}
-
-listener acct {
-    type = acct
-    ipaddr = *
-    port = 1813
-    transport = udp
-}
-
-listener auth_ipv6 {
-    type = auth
-    ipv6addr = ::
-    port = 1812
-    transport = udp
-}
-
-listener acct_ipv6 {
-    type = acct
-    ipv6addr = ::
-    port = 1813
-    transport = udp
-}
-
 modules {
+}
+
+listen {
+    type = auth
+    ipaddr = *
+    port = 1812
+    transport = udp
+}
+
+listen {
+    type = acct
+    ipaddr = *
+    port = 1813
+    transport = udp
+}
+
+listen {
+    type = auth
+    ipv6addr = ::
+    port = 1812
+    transport = udp
+}
+
+listen {
+    type = acct
+    ipv6addr = ::
+    port = 1813
+    transport = udp
 }
 
 server default {
     authorize {
     }
-
     authenticate {
     }
-
     preacct {
     }
-
     accounting {
     }
-
     session {
     }
-
     post-auth {
     }
-
     pre-proxy {
     }
-
     post-proxy {
     }
 }
@@ -170,9 +175,9 @@ log_msg "Permissions fixed"
 # 8. Test configuration
 log_msg "Testing configuration..."
 if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 2>&1; then
-    log_msg "Configuration test PASSED"
+    log_msg "✓ Configuration test PASSED"
 else
-    log_msg "Configuration test FAILED - showing errors:"
+    log_msg "✗ Configuration test FAILED"
     head -30 /tmp/radius_config_test.log | tee -a "$LOG_FILE"
 fi
 
@@ -181,7 +186,7 @@ log_msg "Starting FreeRADIUS service..."
 systemctl daemon-reload
 systemctl enable freeradius
 if systemctl start freeradius 2>&1; then
-    log_msg "Service started successfully"
+    log_msg "Service started"
 else
     log_msg "Warning: service startup issue"
 fi
@@ -189,11 +194,10 @@ sleep 3
 
 # 10. Check if running
 if systemctl is-active --quiet freeradius; then
-    log_msg "✓ SUCCESS: FreeRADIUS is running on port 1812/1813"
+    log_msg "✓ SUCCESS: FreeRADIUS is running on ports 1812/1813"
 else
-    log_msg "✗ WARNING: FreeRADIUS not running"
+    log_msg "✗ FAILED: FreeRADIUS not running"
     journalctl -u freeradius -n 20 --no-pager 2>&1 | tee -a "$LOG_FILE"
 fi
 
 log_msg "FreeRADIUS installation complete"
-echo ""
