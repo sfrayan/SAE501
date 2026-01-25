@@ -1,8 +1,8 @@
 #!/bin/bash
 
 ###############################################
-# install_all.sh
-# Installation complète SAE501 - Tout automatisé!
+# install_all.sh - SAE501 Installation Complète
+# Pour VM Debian 11 avec interface NAT VirtualBox
 # Usage: sudo bash scripts/install_all.sh
 ###############################################
 
@@ -26,6 +26,7 @@ log_err()  { echo -e "${RED}[✗]${NC} $1" | tee -a "$LOG_FILE"; exit 1; }
 echo -e "${BLUE}"
 echo "╔════════════════════════════════════════╗"
 echo "║  Installation SAE501 - AUTOMATISÉE       ║"
+echo "║  Debian 11 | NAT VM | Optimisée          ║"
 echo "╚════════════════════════════════════════╝"
 echo -e "${NC}\n"
 
@@ -40,151 +41,160 @@ apt-get update -qq >> "$LOG_FILE" 2>&1 || true
 apt-get upgrade -y -qq >> "$LOG_FILE" 2>&1 || true
 log_ok "Système mis à jour"
 
-# 2. Installation MySQL
-log_info "=== 2. INSTALLATION MYSQL ==="
+# 2. Installation dépendances de base
+log_info "=== 2. INSTALLATION DÉPENDANCES DE BASE ==="
+apt-get install -y -qq curl wget git openssh-client openssl >> "$LOG_FILE" 2>&1 || log_warn "Certains paquets non critiques ont échoué"
+log_ok "Dépendances installées"
+
+# 3. Installation MySQL/MariaDB
+log_info "=== 3. INSTALLATION MYSQL/MARIADB ==="
 if bash "$SCRIPT_DIR/install_mysql.sh" >> "$LOG_FILE" 2>&1; then
-    log_ok "MySQL installé"
+    log_ok "MySQL/MariaDB installé et configuré"
 else
     log_warn "MySQL installation: certains avertissements ignorés, poursuivant..."
 fi
 
-# 3. Installation FreeRADIUS
-log_info "=== 3. INSTALLATION FREERADIUS ==="
+# 4. Installation FreeRADIUS
+log_info "=== 4. INSTALLATION FREERADIUS ==="
 if bash "$SCRIPT_DIR/install_radius.sh" >> "$LOG_FILE" 2>&1; then
     log_ok "FreeRADIUS installé"
 else
     log_warn "FreeRADIUS installation: certains avertissements ignorés, poursuivant..."
 fi
 
-# 3.5 Restart FreeRADIUS and verify
-log_info "=== 3.5 VÉRIFICATION FREERADIUS ==="
+# 4.5 Redémarrage et vérification FreeRADIUS
+log_info "=== 4.5 VÉRIFICATION FREERADIUS ==="
 log_info "Redémarrage de FreeRADIUS..."
-sudo systemctl stop freeradius 2>/dev/null || true
-sleep 1
-sudo systemctl start freeradius 2>/dev/null || true
+systemctl stop freeradius 2>/dev/null || true
+sleep 2
+systemctl start freeradius 2>/dev/null || true
 sleep 3
 
 if systemctl is-active freeradius > /dev/null 2>&1; then
-    log_ok "FreeRADIUS actif"
+    log_ok "FreeRADIUS actif et fonctionnel"
 else
-    log_warn "FreeRADIUS peut ne pas être démarré - tentative de diagnostic"
-    sudo systemctl status freeradius >> "$LOG_FILE" 2>&1 || true
+    log_warn "FreeRADIUS peut ne pas être démarré"
+    systemctl status freeradius >> "$LOG_FILE" 2>&1 || true
 fi
 
-# 4. Installation PHP
-log_info "=== 4. INSTALLATION PHP-ADMIN ==="
+# 5. Installation Apache2 et PHP
+log_info "=== 5. INSTALLATION APACHE2 ET PHP ==="
 if bash "$SCRIPT_DIR/install_php_admin.sh" >> "$LOG_FILE" 2>&1; then
-    log_ok "PHP-Admin installé"
+    log_ok "Apache2 et PHP installés"
 else
-    log_warn "PHP-Admin installation: certains avertissements ignorés, poursuivant..."
+    log_warn "Apache2/PHP installation: certains avertissements ignorés, poursuivant..."
 fi
 
-# 5. Correction permissions db.env
-log_info "=== 5. CORRECTION PERMISSIONS ==="
+# 5.5 Vérification Apache
+log_info "=== 5.5 VÉRIFICATION APACHE2 ==="
+if systemctl is-active apache2 > /dev/null 2>&1; then
+    log_ok "Apache2 actif et fonctionnel"
+else
+    log_warn "Apache2 n'est pas actif"
+    systemctl start apache2 2>/dev/null || true
+    sleep 2
+fi
+
+# 6. Correction permissions db.env
+log_info "=== 6. CORRECTION PERMISSIONS ==="
 if [[ -f "/opt/sae501/secrets/db.env" ]]; then
     chmod 640 /opt/sae501/secrets/db.env 2>/dev/null || true
     chown root:www-data /opt/sae501/secrets/db.env 2>/dev/null || true
     log_ok "Permissions db.env corrigées"
 else
-    log_warn "db.env non trouvé, création..."
-    mkdir -p /opt/sae501/secrets
-    touch /opt/sae501/secrets/db.env
-    chmod 640 /opt/sae501/secrets/db.env
+    log_warn "db.env non trouvé"
 fi
 
-# 6. Création utilisateur test
-log_info "=== 6. CRÉATION UTILISATEUR TEST ==="
+# 7. Création utilisateur test dans RADIUS
+log_info "=== 7. CRÉATION UTILISATEUR TEST RADIUS ==="
 sleep 2
 
-# Récupérer le mot de passe depuis db.env
+# Récupérer identifiants depuis db.env
 if [[ -f "/opt/sae501/secrets/db.env" ]]; then
     source /opt/sae501/secrets/db.env
+    DB_USER_RADIUS="${DB_USER_RADIUS:-radiususer}"
+    DB_PASSWORD_RADIUS="${DB_PASSWORD_RADIUS:-}"
 else
-    log_warn "db.env non trouvé, utilisant mots de passe par défaut"
+    log_warn "db.env non trouvé, utilisant identifiants par défaut"
     DB_USER_RADIUS="radiususer"
     DB_PASSWORD_RADIUS="eovNQTvgpeBvBY056sxWDDXOo"
-    DB_NAME="radius"
 fi
 
+DB_NAME="${DB_NAME:-radius}"
+
 # Insérer utilisateur de test
-mysql -u "$DB_USER_RADIUS" -p"$DB_PASSWORD_RADIUS" "$DB_NAME" << EOF >> "$LOG_FILE" 2>&1 || log_warn "Erreur insertion utilisateur test"
+mysql -u "$DB_USER_RADIUS" -p"$DB_PASSWORD_RADIUS" "$DB_NAME" 2>/dev/null << EOF >> "$LOG_FILE" 2>&1 || log_warn "Erreur insertion utilisateur test"
 INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('wifi_user', 'Cleartext-Password', ':=', 'password123');
-INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('wifi_user', 'User-Profile', ':=', 'default');
+INSERT IGNORE INTO radreply (username, attribute, op, value) VALUES ('wifi_user', 'Reply-Message', '=', 'Connecté au réseau Wi-Fi SAE501');
 INSERT IGNORE INTO radusergroup (username, groupname, priority) VALUES ('wifi_user', 'default', 1);
 EOF
 
 log_ok "Utilisateur test wifi_user créé"
 
-# 7. Test RADIUS
-log_info "=== 7. TEST RADIUS ==="
-log_info "Redémarrage FreeRADIUS pour test..."
-sudo systemctl restart freeradius 2>/dev/null || log_warn "Erreur redémarrage"
+# 8. Test RADIUS
+log_info "=== 8. TEST FREERADIUS ==="
+systemctl restart freeradius 2>/dev/null || true
 sleep 4
 
 if systemctl is-active freeradius > /dev/null 2>&1; then
-    log_ok "FreeRADIUS actif"
+    log_ok "FreeRADIUS est actif"
     
-    # Try the test
-    if radtest wifi_user password123 localhost 1812 testing123 2>&1 | tee -a "$LOG_FILE" | grep -q "Access-Accept\|Access-Reject\|Received"; then
-        log_ok "Test RADIUS réussi!"
+    # Essayer test radtest si disponible
+    if command -v radtest &> /dev/null; then
+        log_info "Tentative de test RADIUS (radtest)..."
+        if radtest wifi_user password123 localhost 1812 testing123 2>&1 | tee -a "$LOG_FILE" | grep -qi "access-accept\|access-reject\|received"; then
+            log_ok "Test RADIUS réussi!"
+        else
+            log_warn "Test RADIUS: pas de réponse attendue (peut être normal)"
+        fi
     else
-        log_warn "Test RADIUS: pas de réponse (peut être normal en début)"
-        log_info "Pour tester manuellement:"
-        log_info "  radtest wifi_user password123 localhost 1812 testing123"
+        log_info "radtest non disponible - test manuel possible: radtest wifi_user password123 localhost 1812 testing123"
     fi
 else
-    log_warn "FreeRADIUS n'est pas actif - test ignoré"
-    log_info "Pour relancer: sudo systemctl start freeradius"
+    log_warn "FreeRADIUS n'est pas actif"
+    log_info "Pour redémarrer: sudo systemctl restart freeradius"
 fi
 
-# 8. Installation Wazuh (OPTIONNEL)
-log_info "=== 8. INSTALLATION WAZUH ==="
-if [[ -f "$SCRIPT_DIR/install_wazuh.sh" ]]; then
-    if bash "$SCRIPT_DIR/install_wazuh.sh" >> "$LOG_FILE" 2>&1; then
-        log_ok "Wazuh installé"
-    else
-        log_warn "Wazuh non disponible ou installation échouée - optionnel"
-    fi
-else
-    log_warn "Script install_wazuh.sh non trouvé - Wazuh ignoré"
-fi
-
-# 9. Diagnostic final
+# 9. Diagnostic final (optionnel)
 log_info "=== 9. DIAGNOSTIC FINAL ==="
 if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
-    bash "$SCRIPT_DIR/diagnostics.sh" >> "$LOG_FILE" 2>&1 || true
+    bash "$SCRIPT_DIR/diagnostics.sh" >> "$LOG_FILE" 2>&1 || log_warn "Diagnostic script erreur"
+    log_ok "Diagnostic terminé"
 fi
-log_ok "Diagnostic terminé"
 
 # 10. Résumé final
 echo -e "\n${GREEN}╔════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║  ✓ INSTALLATION TERMINÉE !              ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════╝${NC}\n"
 
-echo -e "${BLUE}🌐 ACCÈS AUX SERVICES:${NC}"
-echo "  ✅ PHP-Admin:      http://localhost/php-admin/"
-echo "  ✅ FreeRADIUS:     localhost:1812"
+echo -e "${BLUE}🌐 ACCÈS AUX SERVICES (NAT VM):${NC}"
+echo "  ✅ Apache2:        http://localhost/ (sur la VM)"
+echo "  ✅ FreeRADIUS:     localhost:1812 (UDP RADIUS)"
+echo "  ✅ MySQL/MariaDB:  localhost:3306"
 echo ""
 
-echo -e "${BLUE}📄 IDENTIFIANTS:${NC}"
-echo "  Admin PHP:       admin / Admin@Secure123!"
-echo "  Test Wi-Fi:      wifi_user / password123"
+echo -e "${BLUE}👤 IDENTIFIANTS TEST:${NC}"
+echo "  Wi-Fi:           wifi_user / password123"
 echo "  RADIUS Secret:   testing123"
 echo ""
 
-echo -e "${BLUE}📃 FICHIERS UTILES:${NC}"
+echo -e "${BLUE}📁 CHEMINS IMPORTANTS:${NC}"
 echo "  Log installation: $LOG_FILE"
-echo "  Credentials:     cat /opt/sae501/secrets/db.env"
-if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
-    echo "  Diagnostic:      bash $SCRIPT_DIR/diagnostics.sh"
-fi
+echo "  Identifiants DB:  /opt/sae501/secrets/db.env"
+echo "  Scripts:          $SCRIPT_DIR/"
 echo ""
 
-echo -e "${BLUE}🔏 PROCHAINES ÉTAPES:${NC}"
-echo "  1. Vérifier FreeRADIUS: radtest wifi_user password123 localhost 1812 testing123"
-echo "  2. Accéder PHP-Admin: http://localhost/php-admin/"
-echo "  3. Changer les mots de passe par défaut"
-echo "  4. Configurer le routeur RADIUS (IP: localhost, port: 1812, secret: testing123)"
+echo -e "${BLUE}🔧 COMMANDES UTILES:${NC}"
+echo "  Vérifier FreeRADIUS: sudo systemctl status freeradius"
+echo "  Test RADIUS:        radtest wifi_user password123 localhost 1812 testing123"
+echo "  Voir identifiants:  cat /opt/sae501/secrets/db.env"
+echo "  Logs:               tail -f $LOG_FILE"
 echo ""
 
-echo -e "${BLUE}✨ Installation réussie!${NC}"
+echo -e "${BLUE}🔌 CONFIGURATION ROUTEUR TP-LINK:${NC}"
+echo "  Serveur RADIUS:  127.0.0.1 (ou IP VM si accès distant)"
+echo "  Port:            1812"
+echo "  Secret:          testing123"
+echo ""
+
+echo -e "${GREEN}✨ Installation réussie!${NC}"
