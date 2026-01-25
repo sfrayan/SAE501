@@ -63,6 +63,13 @@ chown freerad:freerad "$RADIUS_LOG_DIR"
 chmod 750 "$RADIUS_LOG_DIR"
 
 # ============================================================================
+# Clean up conflicting modules
+# ============================================================================
+log_message "INFO" "Nettoyage des modules en conflit..."
+rm -f /etc/freeradius/3.0/mods-enabled/eap-peap
+log_message "SUCCESS" "eap-peap supprimé (conflit avec eap)"
+
+# ============================================================================
 # CRITICAL: Create clean clients.conf file
 # ============================================================================
 log_message "INFO" "Création du fichier clients.conf propre..."
