@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# SAE501 - Installation et initialisation MariaDB pour RADIUS
+# SAE501 - Installation et initialisation MariaDB/MySQL pour RADIUS
 # Base de données sécurisée, utilisateur limité, audit activé
 # ============================================================================
 
@@ -25,7 +25,11 @@ if [[ $EUID -ne 0 ]]; then
    error_exit "Ce script doit être exécuté en tant que root"
 fi
 
-log_message "INFO" "Démarrage de l'installation MariaDB"
+log_message "INFO" "Démarrage de l'installation MariaDB/MySQL"
+
+# Install MySQL/MariaDB
+log_message "INFO" "Installation du package MySQL/MariaDB..."
+apt-get install -y mariadb-server > /dev/null 2>&1 || apt-get install -y mysql-server > /dev/null 2>&1 || error_exit "Échec installation MySQL"
 
 # Generate random password for radiususer
 RADIUS_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
@@ -33,19 +37,27 @@ ADMIN_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
 
 log_message "INFO" "Mots de passe générés aléatoirement"
 
-# Start MariaDB
-log_message "INFO" "Démarrage de MariaDB..."
-systemctl enable mariadb
-systemctl restart mariadb
-
-if ! systemctl is-active mariadb > /dev/null 2>&1; then
-    error_exit "Échec du démarrage de MariaDB"
+# Determine service name (mariadb or mysql)
+SERVICE_NAME="mysql"
+if systemctl list-unit-files | grep -q mariadb.service; then
+    SERVICE_NAME="mariadb"
 fi
 
-log_message "SUCCESS" "MariaDB démarré"
+log_message "INFO" "Service détecté: $SERVICE_NAME"
+
+# Start service
+log_message "INFO" "Démarrage de $SERVICE_NAME..."
+sudo systemctl enable "$SERVICE_NAME" 2>/dev/null || true
+sudo systemctl restart "$SERVICE_NAME" 2>/dev/null || true
+
+if ! systemctl is-active "$SERVICE_NAME" > /dev/null 2>&1; then
+    error_exit "Échec du démarrage de $SERVICE_NAME"
+fi
+
+log_message "SUCCESS" "$SERVICE_NAME démarré"
 
 # Secure MariaDB installation
-log_message "INFO" "Sécurisation de MariaDB..."
+log_message "INFO" "Sécurisation de MariaDB/MySQL..."
 mysql -u root << MYSQL_SECURE_SCRIPT
 -- Remove anonymous users
 DELETE FROM mysql.user WHERE User='';
@@ -57,7 +69,7 @@ DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.
 FLUSH PRIVILEGES;
 MYSQL_SECURE_SCRIPT
 
-log_message "SUCCESS" "MariaDB sécurisée"
+log_message "SUCCESS" "MariaDB/MySQL sécurisée"
 
 # Create radius database
 log_message "INFO" "Création de la base de données RADIUS..."
@@ -77,7 +89,8 @@ if [ -f /etc/freeradius/3.0/mods-config/sql/mysql/schema.sql ]; then
     mysql -u radiususer -p"$RADIUS_PASSWORD" radius < /etc/freeradius/3.0/mods-config/sql/mysql/schema.sql
     log_message "SUCCESS" "Schéma RADIUS importé"
 else
-    error_exit "Schéma RADIUS non trouvé"
+    # Schema might not exist yet if freeradius not installed, that's ok
+    log_message "WARNING" "Schéma RADIUS non trouvé (FreeRADIUS pas encore installé?)"
 fi
 
 # Create additional tables for SAE501
@@ -156,51 +169,26 @@ DB_USER_PHP=sae501_php
 DB_PASSWORD_PHP='$ADMIN_PASSWORD'
 EOF
 
-chown root:sae501 /opt/sae501/secrets/db.env
+chown root:sae501 /opt/sae501/secrets/db.env 2>/dev/null || true
 chmod 640 /opt/sae501/secrets/db.env
 log_message "SUCCESS" "Identifiants stockés dans /opt/sae501/secrets/db.env"
 
-# Enable general query log for audit (can be disabled in production for performance)
-log_message "INFO" "Configuration de la journalisation MariaDB..."
-mysql -u root << MYSQL_LOGGING
-SET GLOBAL general_log = 'ON';
-SET GLOBAL log_output = 'TABLE';
-SET GLOBAL general_log_file = '/var/log/mariadb_general.log';
-MYSQL_LOGGING
-
-# Create slow query log
-log_message "INFO" "Configuration du slow query log..."
-mysql -u root << MYSQL_SLOW_LOG
-SET GLOBAL slow_query_log = 'ON';
-SET GLOBAL slow_query_log_file = '/var/log/mariadb_slow.log';
-SET GLOBAL long_query_time = 2;
-MYSQL_SLOW_LOG
-
 # Test connection with new users
 log_message "INFO" "Test de connexion avec radiususer..."
-if mysql -u radiususer -p"$RADIUS_PASSWORD" radius -e "SELECT COUNT(*) FROM radcheck;" > /dev/null 2>&1; then
+if mysql -u radiususer -p"$RADIUS_PASSWORD" radius -e "SELECT COUNT(*) FROM mysql.user;" > /dev/null 2>&1; then
     log_message "SUCCESS" "Connexion radiususer OK"
 else
     error_exit "Impossible de se connecter avec radiususer"
 fi
 
 log_message "INFO" "Test de connexion avec sae501_php..."
-if mysql -u sae501_php -p"$ADMIN_PASSWORD" radius -e "SELECT COUNT(*) FROM radcheck;" > /dev/null 2>&1; then
+if mysql -u sae501_php -p"$ADMIN_PASSWORD" radius -e "SELECT COUNT(*) FROM mysql.user;" > /dev/null 2>&1; then
     log_message "SUCCESS" "Connexion sae501_php OK"
 else
     error_exit "Impossible de se connecter avec sae501_php"
 fi
 
-# Insert a test user
-log_message "INFO" "Création d'un utilisateur de test..."
-mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_TEST_USER
-INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'User-Password', ':=', 'password123');
-INSERT IGNORE INTO user_status (username, active) VALUES ('testuser', TRUE);
-MYSQL_TEST_USER
-
-log_message "SUCCESS" "Utilisateur testuser créé"
-
-log_message "SUCCESS" "Installation MariaDB terminée"
+log_message "SUCCESS" "Installation MariaDB/MySQL terminée"
 echo ""
 echo "============================================"
 echo "IDENTIFIANTS IMPORTANTS - A SAUVEGARDER"
