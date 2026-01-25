@@ -65,18 +65,18 @@ for mod in pap files; do
     fi
 done
 
-# Configure clients.conf
+# Configure clients.conf - PROPERLY
 log_message "INFO" "Configuration des clients RADIUS..."
 
-# Remove duplicate entries
-grep -v '^client localhost' "$CLIENTS_CONF" > "${CLIENTS_CONF}.tmp" 2>/dev/null || true
-grep -v '^client 127.0.0.1' "${CLIENTS_CONF}.tmp" > "${CLIENTS_CONF}.tmp2" 2>/dev/null || true
-mv "${CLIENTS_CONF}.tmp2" "$CLIENTS_CONF" 2>/dev/null || true
-rm -f "${CLIENTS_CONF}.tmp" 2>/dev/null || true
+# Backup original
+cp "$CLIENTS_CONF" "${CLIENTS_CONF}.backup.$(date +%s)" 2>/dev/null || true
 
-# Add localhost client
-cat >> "$CLIENTS_CONF" << 'EOF'
+# Create a clean clients.conf with only necessary clients
+cat > "${CLIENTS_CONF}.new" << 'EOF'
+# Clients file for FreeRADIUS
+# This file defines the NAS clients that are authorized to connect
 
+# Default clients - localhost testing
 client localhost {
     ipaddr = 127.0.0.1
     ipv6addr = ::1
@@ -91,9 +91,12 @@ client 127.0.0.1 {
     require_message_authenticator = no
     nastype = other
 }
+
 EOF
 
-log_message "SUCCESS" "Clients configurés (localhost + 127.0.0.1)"
+# Replace the original file
+mv "${CLIENTS_CONF}.new" "$CLIENTS_CONF"
+log_message "SUCCESS" "clients.conf recréé avec config de base"
 
 # Create directories if needed
 log_message "INFO" "Création des répertoires FreeRADIUS..."
@@ -122,9 +125,9 @@ log_message "INFO" "Vérification de la syntaxe de configuration..."
 if freeradius -Cx -lstdout -d "$FREERADIUS_CONF" > "$LOG_FILE.config_check" 2>&1; then
     log_message "SUCCESS" "Configuration vérifiée"
 else
-    log_message "WARNING" "Erreurs de configuration détectées:"
-    tail -10 "$LOG_FILE.config_check" >> "$LOG_FILE"
-    cat "$LOG_FILE.config_check"
+    log_message "ERROR" "Erreurs de configuration détectées:"
+    cat "$LOG_FILE.config_check" | tee -a "$LOG_FILE"
+    error_exit "Impossible de continuer avec une config cassée"
 fi
 
 # Enable service
@@ -147,8 +150,7 @@ sleep 3
 if systemctl is-active --quiet freeradius; then
     log_message "SUCCESS" "FreeRADIUS est actif et en écoute"
 else
-    log_message "ERROR" "FreeRADIUS n'a pas pu démarrer"
-    log_message "INFO" "Logs du service:"
+    log_message "WARNING" "FreeRADIUS n'a pas pu démarrer - logs:"
     systemctl status freeradius || true
     journalctl -u freeradius -n 20 --no-pager || true
 fi
