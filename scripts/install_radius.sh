@@ -33,18 +33,16 @@ sleep 2
 log_msg "Creating freerad user/group..."
 useradd -r -s /bin/false freerad 2>/dev/null || true
 
-# 4. Create directories
-log_msg "Creating directories..."
+# 4. Create ALL necessary directories (Debian bug workaround)
+log_msg "Creating FreeRADIUS directories..."
+mkdir -p /etc/freeradius/3.0/mods-available
+mkdir -p /etc/freeradius/3.0/mods-enabled
+mkdir -p /etc/freeradius/3.0/sites-available
+mkdir -p /etc/freeradius/3.0/sites-enabled
 mkdir -p /var/lib/freeradius
 mkdir -p /var/log/freeradius
 
-# 5. Enable modules (create symlinks)
-log_msg "Enabling FreeRADIUS modules..."
-for mod in sql pap files; do
-    ln -sf /etc/freeradius/3.0/mods-available/$mod /etc/freeradius/3.0/mods-enabled/$mod 2>/dev/null || true
-done
-
-# 6. Create radiusd.conf if missing (Debian bug workaround)
+# 5. Create radiusd.conf if missing (Debian bug workaround)
 log_msg "Checking radiusd.conf..."
 if [[ ! -f /etc/freeradius/3.0/radiusd.conf ]]; then
     log_msg "Creating radiusd.conf (missing from package)..."
@@ -185,7 +183,23 @@ else
     log_msg "radiusd.conf already exists"
 fi
 
-# 7. Fix clients.conf - SIMPLE AND CLEAN
+# 6. Create basic module symlinks (even if empty modules)
+log_msg "Creating module symlinks..."
+for mod in pap files sql; do
+    if [[ -f /etc/freeradius/3.0/mods-available/$mod ]]; then
+        ln -sf /etc/freeradius/3.0/mods-available/$mod /etc/freeradius/3.0/mods-enabled/$mod 2>/dev/null || true
+    else
+        log_msg "Warning: module $mod not found in mods-available"
+    fi
+done
+
+# 7. Create default site if needed
+log_msg "Creating default site..."
+if [[ ! -f /etc/freeradius/3.0/sites-enabled/default ]]; then
+    ln -sf /etc/freeradius/3.0/sites-available/default /etc/freeradius/3.0/sites-enabled/default 2>/dev/null || true
+fi
+
+# 8. Fix clients.conf - SIMPLE AND CLEAN
 log_msg "Configuring clients.conf..."
 cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
 # FreeRADIUS Clients Configuration
@@ -208,13 +222,13 @@ CLIENTS_EOF
 
 log_msg "clients.conf configured"
 
-# 8. Fix permissions
+# 9. Fix permissions
 log_msg "Fixing permissions..."
 chown -R freerad:freerad /etc/freeradius /var/lib/freeradius /var/log/freeradius
 chmod -R 750 /etc/freeradius /var/lib/freeradius /var/log/freeradius
 log_msg "Permissions fixed"
 
-# 9. Test configuration
+# 10. Test configuration
 log_msg "Testing configuration..."
 if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 2>&1; then
     log_msg "Configuration test PASSED"
@@ -224,14 +238,14 @@ else
     # Continue anyway - don't fail
 fi
 
-# 10. Enable and start service
+# 11. Enable and start service
 log_msg "Starting FreeRADIUS service..."
 systemctl daemon-reload
 systemctl enable freeradius
 systemctl start freeradius 2>/dev/null || log_msg "Warning: initial start may have issues"
 sleep 3
 
-# 11. Check if running
+# 12. Check if running
 if systemctl is-active --quiet freeradius; then
     log_msg "SUCCESS: FreeRADIUS is running"
 else
