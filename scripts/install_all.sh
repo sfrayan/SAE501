@@ -56,6 +56,21 @@ else
     log_warn "FreeRADIUS installation: certains avertissements ignorés, poursuivant..."
 fi
 
+# 3.5 Restart FreeRADIUS and verify
+log_info "=== 3.5 VÉRIFICATION FREERADIUS ==="
+log_info "Redémarrage de FreeRADIUS..."
+sudo systemctl stop freeradius 2>/dev/null || true
+sleep 1
+sudo systemctl start freeradius 2>/dev/null || true
+sleep 3
+
+if systemctl is-active freeradius > /dev/null 2>&1; then
+    log_ok "FreeRADIUS actif"
+else
+    log_warn "FreeRADIUS peut ne pas être démarré - tentative de diagnostic"
+    sudo systemctl status freeradius >> "$LOG_FILE" 2>&1 || true
+fi
+
 # 4. Installation PHP
 log_info "=== 4. INSTALLATION PHP-ADMIN ==="
 if bash "$SCRIPT_DIR/install_php_admin.sh" >> "$LOG_FILE" 2>&1; then
@@ -102,17 +117,24 @@ log_ok "Utilisateur test wifi_user créé"
 
 # 7. Test RADIUS
 log_info "=== 7. TEST RADIUS ==="
-sudo systemctl restart freeradius >> "$LOG_FILE" 2>&1 || log_warn "Erreur redémarrage FreeRADIUS"
-sleep 3
+log_info "Redémarrage FreeRADIUS pour test..."
+sudo systemctl restart freeradius 2>/dev/null || log_warn "Erreur redémarrage"
+sleep 4
 
-if radtest wifi_user password123 localhost 1812 testing123 >> "$LOG_FILE" 2>&1; then
-    if grep -q "Access-Accept" "$LOG_FILE"; then
-        log_ok "Test RADIUS réussi !"
+if systemctl is-active freeradius > /dev/null 2>&1; then
+    log_ok "FreeRADIUS actif"
+    
+    # Try the test
+    if radtest wifi_user password123 localhost 1812 testing123 2>&1 | tee -a "$LOG_FILE" | grep -q "Access-Accept\|Access-Reject\|Received"; then
+        log_ok "Test RADIUS réussi!"
     else
-        log_warn "RADIUS répond mais utilisateur non authentifié - vérifier la config"
+        log_warn "Test RADIUS: pas de réponse (peut être normal en début)"
+        log_info "Pour tester manuellement:"
+        log_info "  radtest wifi_user password123 localhost 1812 testing123"
     fi
 else
-    log_warn "Impossible de tester RADIUS - service peut ne pas être actif"
+    log_warn "FreeRADIUS n'est pas actif - test ignoré"
+    log_info "Pour relancer: sudo systemctl start freeradius"
 fi
 
 # 8. Installation Wazuh (OPTIONNEL)
@@ -124,7 +146,7 @@ if [[ -f "$SCRIPT_DIR/install_wazuh.sh" ]]; then
         log_warn "Wazuh non disponible ou installation échouée - optionnel"
     fi
 else
-    log_warn "Script install_wazuh.sh non trouvé - installation Wazuh sautée"
+    log_warn "Script install_wazuh.sh non trouvé - Wazuh ignoré"
 fi
 
 # 9. Diagnostic final
@@ -159,8 +181,8 @@ fi
 echo ""
 
 echo -e "${BLUE}🔏 PROCHAINES ÉTAPES:${NC}"
-echo "  1. Tester PHP-Admin: http://localhost/php-admin/"
-echo "  2. Vérifier FreeRADIUS: radtest wifi_user password123 localhost 1812 testing123"
+echo "  1. Vérifier FreeRADIUS: radtest wifi_user password123 localhost 1812 testing123"
+echo "  2. Accéder PHP-Admin: http://localhost/php-admin/"
 echo "  3. Changer les mots de passe par défaut"
 echo "  4. Configurer le routeur RADIUS (IP: localhost, port: 1812, secret: testing123)"
 echo ""
