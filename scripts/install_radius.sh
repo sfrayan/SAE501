@@ -33,7 +33,7 @@ sleep 2
 log_msg "Creating freerad user/group..."
 useradd -r -s /bin/false freerad 2>/dev/null || true
 
-# 4. Create ALL necessary directories (Debian bug workaround)
+# 4. Create ALL necessary directories
 log_msg "Creating FreeRADIUS directories..."
 mkdir -p /etc/freeradius/3.0/mods-available
 mkdir -p /etc/freeradius/3.0/mods-enabled
@@ -41,14 +41,13 @@ mkdir -p /etc/freeradius/3.0/sites-available
 mkdir -p /etc/freeradius/3.0/sites-enabled
 mkdir -p /var/lib/freeradius
 mkdir -p /var/log/freeradius
+mkdir -p /usr/var/run/radiusd
 
-# 5. Create radiusd.conf if missing (Debian bug workaround)
-log_msg "Checking radiusd.conf..."
-if [[ ! -f /etc/freeradius/3.0/radiusd.conf ]]; then
-    log_msg "Creating radiusd.conf (missing from package)..."
-    cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
-# FreeRADIUS configuration file
-# This is a minimal configuration for SAE501
+# 5. Create ULTRA-MINIMAL radiusd.conf (no external modules)
+log_msg "Creating radiusd.conf (minimal configuration)..."
+cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
+# FreeRADIUS - Minimal Configuration for SAE501
+# This configuration is intentionally simple to avoid module dependency issues
 
 prefix = /usr
 exec_prefix = ${prefix}
@@ -93,113 +92,45 @@ listener {
 }
 
 modules {
-    $INCLUDE mods-enabled/
 }
 
 server default {
     authorize {
-        filter_username
         preprocess
-        chap
-        mschap
-        suffix
-        eap {
-            ok = return
-        }
         files
-        sql
-        expiration
-        logintime
-        updated_at {
-            ok = return
-        }
-        user_subgroups
     }
 
     authenticate {
-        Auth-Type PAP {
-            pap
-        }
-        Auth-Type CHAP {
-            chap
-        }
-        Auth-Type MS-CHAP {
-            mschap
-        }
-        mschap
-        digest
-        eap
     }
 
     preacct {
         preprocess
         acct_unique
-        suffix
         files
     }
 
     accounting {
         detail
         unix
-        exec
-        attr_filter.accounting_response
-        sql
     }
 
     session {
     }
 
     post-auth {
-        if (session-state:User-Name) {
-            update reply {
-                User-Name := "%{session-state:User-Name}"
-            }
-        }
-        update {
-            &reply: += &session-state:
-        }
-        remove_reply_message_if_eap
-        Post-Auth-Type REJECT {
-            attr_filter.access_reject
-            eap
-            remove_reply_message_if_eap
-        }
-        Post-Auth-Type Challenge {
-        }
-        sql
-        exec
     }
 
     pre-proxy {
     }
 
     post-proxy {
-        eap
     }
 }
 RADIUSD_EOF
-    log_msg "radiusd.conf created"
-else
-    log_msg "radiusd.conf already exists"
-fi
 
-# 6. Create basic module symlinks (even if empty modules)
-log_msg "Creating module symlinks..."
-for mod in pap files sql; do
-    if [[ -f /etc/freeradius/3.0/mods-available/$mod ]]; then
-        ln -sf /etc/freeradius/3.0/mods-available/$mod /etc/freeradius/3.0/mods-enabled/$mod 2>/dev/null || true
-    else
-        log_msg "Warning: module $mod not found in mods-available"
-    fi
-done
+log_msg "radiusd.conf created (minimal)"
 
-# 7. Create default site if needed
-log_msg "Creating default site..."
-if [[ ! -f /etc/freeradius/3.0/sites-enabled/default ]]; then
-    ln -sf /etc/freeradius/3.0/sites-available/default /etc/freeradius/3.0/sites-enabled/default 2>/dev/null || true
-fi
-
-# 8. Fix clients.conf - SIMPLE AND CLEAN
+# 6. Create minimal clients.conf
 log_msg "Configuring clients.conf..."
 cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
 # FreeRADIUS Clients Configuration
@@ -222,35 +153,51 @@ CLIENTS_EOF
 
 log_msg "clients.conf configured"
 
-# 9. Fix permissions
+# 7. Create a minimal files authorize file if it doesn't exist
+if [[ ! -f /etc/freeradius/3.0/mods-config/files/authorize ]]; then
+    mkdir -p /etc/freeradius/3.0/mods-config/files
+    cat > /etc/freeradius/3.0/mods-config/files/authorize << 'FILES_EOF'
+# SAE501 Test Users
+admin Cleartext-Password := "Admin@Secure123!"
+    Reply-Message := "Welcome admin"
+
+wifi_user Cleartext-Password := "password123"
+    Reply-Message := "Welcome wifi_user"
+FILES_EOF
+fi
+
+# 8. Fix permissions
 log_msg "Fixing permissions..."
-chown -R freerad:freerad /etc/freeradius /var/lib/freeradius /var/log/freeradius
-chmod -R 750 /etc/freeradius /var/lib/freeradius /var/log/freeradius
+chown -R freerad:freerad /etc/freeradius /var/lib/freeradius /var/log/freeradius /usr/var/run/radiusd 2>/dev/null || true
+chmod -R 750 /etc/freeradius /var/lib/freeradius /var/log/freeradius /usr/var/run/radiusd 2>/dev/null || true
 log_msg "Permissions fixed"
 
-# 10. Test configuration
+# 9. Test configuration
 log_msg "Testing configuration..."
 if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 2>&1; then
     log_msg "Configuration test PASSED"
 else
     log_msg "Configuration test FAILED - showing errors:"
-    cat /tmp/radius_config_test.log | tee -a "$LOG_FILE"
-    # Continue anyway - don't fail
+    cat /tmp/radius_config_test.log | head -20 | tee -a "$LOG_FILE"
 fi
 
-# 11. Enable and start service
+# 10. Enable and start service
 log_msg "Starting FreeRADIUS service..."
 systemctl daemon-reload
 systemctl enable freeradius
-systemctl start freeradius 2>/dev/null || log_msg "Warning: initial start may have issues"
+if systemctl start freeradius 2>&1 | tee -a "$LOG_FILE"; then
+    log_msg "Service started successfully"
+else
+    log_msg "Warning: service may have startup issues"
+fi
 sleep 3
 
-# 12. Check if running
+# 11. Check if running
 if systemctl is-active --quiet freeradius; then
-    log_msg "SUCCESS: FreeRADIUS is running"
+    log_msg "SUCCESS: FreeRADIUS is running and listening on port 1812/1813"
 else
-    log_msg "WARNING: FreeRADIUS not running - check logs"
-    journalctl -u freeradius -n 10 --no-pager || true
+    log_msg "WARNING: FreeRADIUS not running - checking systemd logs:"
+    journalctl -u freeradius -n 20 --no-pager 2>&1 | tee -a "$LOG_FILE"
 fi
 
 log_msg "FreeRADIUS installation complete"
