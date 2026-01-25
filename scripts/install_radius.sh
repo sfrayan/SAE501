@@ -28,10 +28,19 @@ fi
 
 log_message "INFO" "Démarrage de l'installation RADIUS"
 
+# Update package list
+log_message "INFO" "Mise à jour de la liste des paquets..."
+apt-get update -qq || true
+
 # IMPORTANT: Install FreeRADIUS package FIRST
 log_message "INFO" "Installation du package FreeRADIUS..."
-apt-get install -y freeradius freeradius-mysql freeradius-utils mysql-client > /dev/null 2>&1 || error_exit "Échec installation FreeRADIUS"
+if ! apt-get install -y freeradius freeradius-mysql freeradius-utils mysql-client 2>&1 | tee -a "$LOG_FILE"; then
+    error_exit "Échec installation FreeRADIUS - vérifiez les erreurs ci-dessus"
+fi
 log_message "INFO" "Package FreeRADIUS installé"
+
+# Wait for freeradius to settle
+sleep 2
 
 # NOW we can create radius log directory and set permissions (freerad user exists now)
 mkdir -p "$RADIUS_LOG_DIR"
@@ -175,7 +184,6 @@ server default-sae501 {
     
     authorize {
         preprocess
-        auth_log
         chap
         mschap
         digest
@@ -232,7 +240,6 @@ server default-sae501 {
     }
     
     post-auth {
-        reply_log
         exec
         remove_reply_message_if_eap
         Post-Auth-Type REJECT {
@@ -258,26 +265,10 @@ EOF
 chown freerad:freerad /etc/freeradius/3.0/sites-enabled/default-sae501
 chmod 640 /etc/freeradius/3.0/sites-enabled/default-sae501
 
-# Create auth and reply log files
-cat > /etc/freeradius/3.0/mods-available/auth_log << 'EOF'
-auth_log {
-    filename = "/var/log/sae501/radius/auth.log"
-}
-EOF
-
-cat > /etc/freeradius/3.0/mods-available/reply_log << 'EOF'
-reply_log {
-    filename = "/var/log/sae501/radius/reply.log"
-}
-EOF
-
-ln -sf ../mods-available/auth_log /etc/freeradius/3.0/mods-enabled/auth_log 2>/dev/null || true
-ln -sf ../mods-available/reply_log /etc/freeradius/3.0/mods-enabled/reply_log 2>/dev/null || true
-
 # Create log files with proper permissions
-touch "$RADIUS_LOG_DIR"/auth.log "$RADIUS_LOG_DIR"/reply.log "$RADIUS_LOG_DIR"/accounting.log
-chown freerad:freerad "$RADIUS_LOG_DIR"/*.log
-chmod 640 "$RADIUS_LOG_DIR"/*.log
+touch "$RADIUS_LOG_DIR"/accounting.log
+chown freerad:freerad "$RADIUS_LOG_DIR"/*.log 2>/dev/null || true
+chmod 640 "$RADIUS_LOG_DIR"/*.log 2>/dev/null || true
 
 # Test RADIUS configuration
 log_message "INFO" "Test de la configuration RADIUS..."
@@ -289,8 +280,8 @@ fi
 
 # Start RADIUS service
 log_message "INFO" "Démarrage du service FreeRADIUS..."
-systemctl enable freeradius
-systemctl restart freeradius
+systemctl enable freeradius 2>&1 | tee -a "$LOG_FILE" || true
+systemctl restart freeradius 2>&1 | tee -a "$LOG_FILE" || error_exit "Échec du démarrage de FreeRADIUS"
 
 if systemctl is-active freeradius > /dev/null 2>&1; then
     log_message "SUCCESS" "Service FreeRADIUS démarré avec succès"
@@ -298,10 +289,5 @@ else
     error_exit "Échec du démarrage de FreeRADIUS"
 fi
 
-# Test RADIUS authentication
-log_message "INFO" "Test de la connexion RADIUS sur localhost..."
-echo "User-Name = 'testuser', User-Password = 'testpass'" | radclient -f - localhost:1812 auth "${RADIUS_SECRET:-testing123}" 2>&1 | tee -a "$LOG_FILE" || true
-
 log_message "SUCCESS" "Installation RADIUS terminée"
 log_message "INFO" "Logs disponibles à: $RADIUS_LOG_DIR"
-log_message "INFO" "Vérifier: /var/log/sae501/radius/auth.log et reply.log"
