@@ -270,9 +270,9 @@ touch "$RADIUS_LOG_DIR"/accounting.log
 chown freerad:freerad "$RADIUS_LOG_DIR"/*.log 2>/dev/null || true
 chmod 640 "$RADIUS_LOG_DIR"/*.log 2>/dev/null || true
 
-# Test RADIUS configuration
+# Test RADIUS configuration using full path
 log_message "INFO" "Test de la configuration RADIUS..."
-if radiusd -C 2>&1 | tee -a "$LOG_FILE"; then
+if /usr/sbin/radiusd -C 2>&1 | tee -a "$LOG_FILE"; then
     log_message "SUCCESS" "Configuration RADIUS valide"
 else
     error_exit "Configuration RADIUS invalide"
