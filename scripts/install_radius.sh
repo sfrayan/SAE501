@@ -28,7 +28,12 @@ fi
 
 log_message "INFO" "Démarrage de l'installation RADIUS"
 
-# Create radius log directory
+# IMPORTANT: Install FreeRADIUS package FIRST
+log_message "INFO" "Installation du package FreeRADIUS..."
+apt-get install -y freeradius freeradius-mysql freeradius-utils mysql-client > /dev/null 2>&1 || error_exit "Échec installation FreeRADIUS"
+log_message "INFO" "Package FreeRADIUS installé"
+
+# NOW we can create radius log directory and set permissions (freerad user exists now)
 mkdir -p "$RADIUS_LOG_DIR"
 chown freerad:freerad "$RADIUS_LOG_DIR"
 chmod 750 "$RADIUS_LOG_DIR"
@@ -266,8 +271,8 @@ reply_log {
 }
 EOF
 
-ln -sf ../mods-available/auth_log /etc/freeradius/3.0/mods-enabled/auth_log 2>/dev/null
-ln -sf ../mods-available/reply_log /etc/freeradius/3.0/mods-enabled/reply_log 2>/dev/null
+ln -sf ../mods-available/auth_log /etc/freeradius/3.0/mods-enabled/auth_log 2>/dev/null || true
+ln -sf ../mods-available/reply_log /etc/freeradius/3.0/mods-enabled/reply_log 2>/dev/null || true
 
 # Create log files with proper permissions
 touch "$RADIUS_LOG_DIR"/auth.log "$RADIUS_LOG_DIR"/reply.log "$RADIUS_LOG_DIR"/accounting.log
