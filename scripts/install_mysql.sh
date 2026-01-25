@@ -56,6 +56,9 @@ fi
 
 log_message "SUCCESS" "$SERVICE_NAME démarré"
 
+# Wait for MySQL to be ready
+sleep 2
+
 # Secure MariaDB installation
 log_message "INFO" "Sécurisation de MariaDB/MySQL..."
 mysql -u root << MYSQL_SECURE_SCRIPT
@@ -71,8 +74,8 @@ MYSQL_SECURE_SCRIPT
 
 log_message "SUCCESS" "MariaDB/MySQL sécurisée"
 
-# Create radius database
-log_message "INFO" "Création de la base de données RADIUS..."
+# Create radius database and user
+log_message "INFO" "Création de la base de données RADIUS et utilisateur..."
 mysql -u root << MYSQL_CREATE_DB
 CREATE DATABASE IF NOT EXISTS radius DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS 'radiususer'@'localhost' IDENTIFIED BY '$RADIUS_PASSWORD';
@@ -82,6 +85,24 @@ MYSQL_CREATE_DB
 
 log_message "SUCCESS" "Base de données RADIUS créée"
 log_message "SUCCESS" "Utilisateur radiususer créé (mot de passe: $RADIUS_PASSWORD)"
+
+# Wait for user to be available
+log_message "INFO" "Attente de la disponibilité du nouvel utilisateur..."
+sleep 2
+
+# Test connection before continuing
+log_message "INFO" "Vérification de la connexion radiususer..."
+for i in {1..5}; do
+    if mysql -u radiususer -p"$RADIUS_PASSWORD" radius -e "SELECT 1;" > /dev/null 2>&1; then
+        log_message "SUCCESS" "Connexion radiususer OK"
+        break
+    elif [ $i -lt 5 ]; then
+        log_message "WARNING" "Tentative $i/5 - En attente..."
+        sleep 1
+    else
+        error_exit "Impossible de se connecter avec radiususer après 5 tentatives"
+    fi
+done
 
 # Create RADIUS schema tables (FreeRADIUS schema)
 log_message "INFO" "Création du schéma RADIUS..."
@@ -248,6 +269,9 @@ FLUSH PRIVILEGES;
 MYSQL_CREATE_PHPUSER
 
 log_message "SUCCESS" "Utilisateur PHP admin créé"
+
+# Wait for PHP user to be available
+sleep 1
 
 # Store credentials securely
 log_message "INFO" "Stockage sécurisé des identifiants..."
