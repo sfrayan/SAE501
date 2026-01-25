@@ -8,6 +8,7 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 - 📊 Monitoring et détection d'anomalies
 - 🔐 Logs d'audit complets
 - 🎐 Installation et déploiement rapides
+- 🛡️ **Hardening sécurité complet (NOUVEAU)**
 
 ---
 
@@ -102,7 +103,7 @@ sudo bash scripts/install_all.sh
 3. Installe MySQL et crée la base RADIUS
 4. Installe PHP-Admin (interface web)
 5. Installe Wazuh (monitoring)
-6. Configure le hardening sécurité
+6. **Configure le hardening sécurité ⭐ NOUVEAU**
 7. Lance les diagnostics
 
 **Durée estimée**: 15-20 minutes
@@ -139,7 +140,14 @@ bash scripts/test_installation.sh
 
 Résultat attendu: **✅ 10/10 tests réussis**
 
-### 4.3 Vérifier les accès
+### 4.3 Lancer les tests sécurité ⭐ NOUVEAU
+```bash
+sudo bash scripts/test_security.sh
+```
+
+Résultat attendu: **✅ 20+/20+ tests sécurité réussis**
+
+### 4.4 Vérifier les accès
 ```bash
 bash scripts/show_credentials.sh
 ```
@@ -148,9 +156,47 @@ Nota les identifiants affichés!
 
 ---
 
-## **ÉTAPE 5: Premières configurations**
+## **ÉTAPE 5: Configuration Sécurité Avancée (NOUVEAU) ⭐**
 
-### 5.1 Accéder à PHP-Admin
+### 5.1 Générer les certificats SSL/TLS
+
+```bash
+# Générer certificats self-signed (développement)
+sudo bash scripts/generate_certificates.sh
+
+# OU pour production (Let's Encrypt)
+sudo apt-get install -y certbot python3-certbot-apache
+sudo certbot certonly --apache -d VOTRE_DOMAINE.com
+```
+
+### 5.2 Vérifier le hardening appliqué
+
+```bash
+# Vérifier UFW firewall
+sudo ufw status verbose
+
+# Vérifier SSH hardening
+sudo sshd -T | grep -E "PermitRootLogin|PasswordAuthentication|X11"
+
+# Vérifier MySQL hardening
+mysql -u root -p -e "SELECT User, Host FROM mysql.user;"
+
+# Vérifier Fail2Ban
+sudo fail2ban-client status
+```
+
+### 5.3 Consulter le guide complet
+
+```bash
+# Voir le guide de sécurité détaillé
+cat docs/HARDENING_GUIDE.md
+```
+
+---
+
+## **ÉTAPE 6: Premières configurations**
+
+### 6.1 Accéder à PHP-Admin
 
 ```
 URL: http://VOTRE_IP/admin
@@ -164,7 +210,7 @@ Mot de passe: Admin@Secure123! (affiché en fin d'install)
 3. Configurez le secret RADIUS
 4. Configurez l'IP du routeur NAS
 
-### 5.2 Accéder à Wazuh
+### 6.2 Accéder à Wazuh
 
 ```
 URL: https://VOTRE_IP:5601
@@ -178,7 +224,7 @@ Mot de passe: SecurePassword123! (affiché en fin d'install)
 - 🚨 Alertes de sécurité
 - 📋 Logs complets
 
-### 5.3 CHANGER LES MOTS DE PASSE (⚠️ OBLIGATOIRE!)
+### 6.3 CHANGER LES MOTS DE PASSE (⚠️ OBLIGATOIRE!)
 
 ```bash
 # Afficher les mots de passe actuels
@@ -199,9 +245,9 @@ EXIT;
 
 ---
 
-## **ÉTAPE 6: Configurer le routeur Wi-Fi**
+## **ÉTAPE 7: Configurer le routeur Wi-Fi**
 
-### 6.1 Accéder à l'interface du routeur
+### 7.1 Accéder à l'interface du routeur
 
 ```
 URL: http://192.168.1.1
@@ -209,7 +255,7 @@ Login: admin
 Password: admin (par défaut TP-Link)
 ```
 
-### 6.2 Configurer l'authentification Wi-Fi
+### 7.2 Configurer l'authentification Wi-Fi
 
 1. Allez dans **Wireless Settings** ou **Security**
 2. Sélectionnez le SSID d'entreprise
@@ -220,7 +266,7 @@ Password: admin (par défaut TP-Link)
 7. **Shared Secret**: Celui configuré en PHP-Admin Paramétrages
 8. **Cliquer Save**
 
-### 6.3 Tester la connexion
+### 7.3 Tester la connexion
 
 Sur un ordinateur:
 1. Chercher le réseau Wi-Fi
@@ -232,9 +278,9 @@ Sur un ordinateur:
 
 ---
 
-## **ÉTAPE 7: Gestion des utilisateurs**
+## **ÉTAPE 8: Gestion des utilisateurs**
 
-### 7.1 Ajouter un utilisateur
+### 8.1 Ajouter un utilisateur
 
 **Via PHP-Admin**:
 1. Accédez à `http://VOTRE_IP/admin`
@@ -255,14 +301,14 @@ VALUES ('jean.dupont', 'User-Password', ':=', MD5('MonPasse@123'));
 EXIT;
 ```
 
-### 7.2 Lister les utilisateurs
+### 8.2 Lister les utilisateurs
 
 **Via PHP-Admin**:
 1. Cliquez "Lister utilisateurs"
 2. Voir tous les comptes créés
 3. Actions: modifier, supprimer, activer/désactiver
 
-### 7.3 Consulter les logs d'authentification
+### 8.3 Consulter les logs d'authentification
 
 **Via PHP-Admin**:
 1. Cliquez "Logs d'audit"
@@ -276,28 +322,31 @@ sudo tail -f /var/log/freeradius/radius.log
 
 ---
 
-## **ÉTAPE 8: Monitoring et sécurité**
+## **ÉTAPE 9: Monitoring et sécurité**
 
-### 8.1 Consulter le monitoring Wazuh
+### 9.1 Consulter le monitoring Wazuh
 
 1. Accédez à `https://VOTRE_IP:5601`
 2. **Onglet Agents**: voir état système
 3. **Onglet Alerts**: voir les alertes sécurité
 4. **Onglet Logs**: voir les logs complets
 
-### 8.2 Vérifier les infos système
+### 9.2 Vérifier les infos système
 
 **Via PHP-Admin**:
 1. Cliquez "Infos système"
 2. Voir l'état des services
 3. Cliquer sur "Tester" pour diagnostics
 
-### 8.3 Dépannage
+### 9.3 Dépannage
 
 **Si quelque chose ne fonctionne pas**:
 ```bash
 # Tests complets
 bash scripts/test_installation.sh
+
+# Tests sécurité
+sudo bash scripts/test_security.sh
 
 # Diagnostics détaillés
 bash scripts/diagnostics.sh
@@ -315,9 +364,9 @@ sudo systemctl restart wazuh-manager
 
 ---
 
-## **ÉTAPE 9: Sauvegarder et maintenir**
+## **ÉTAPE 10: Sauvegarder et maintenir**
 
-### 9.1 Sauvegarder la base de données
+### 10.1 Sauvegarder la base de données
 
 ```bash
 # Sauvegarde complète
@@ -326,14 +375,14 @@ mysqldump -u root -p radius > backup_radius_$(date +%Y%m%d).sql
 # Entrer le mot de passe MySQL root
 ```
 
-### 9.2 Restaurer une sauvegarde
+### 10.2 Restaurer une sauvegarde
 
 ```bash
 # Si problème, restaurer
 mysql -u root -p radius < backup_radius_20260123.sql
 ```
 
-### 9.3 Maintenance régulière
+### 10.3 Maintenance régulière
 
 ```bash
 # Chaque semaine:
@@ -389,6 +438,7 @@ https://sfrayan.github.io/SAE501
 - ✓ Scan secrets (TruffleHog)
 - ✓ Vérification documentation
 - ✓ Test scripts installation
+- ✓ Test sécurité (NOUVEAU)
 
 Résultat: **Badge automatique** ✅
 
@@ -417,6 +467,7 @@ Résultat: **Badge automatique** ✅
 - [ ] Configurez le firewall UFW
 - [ ] Testez les sauvegardes
 - [ ] Désactivez les accès inutiles
+- [ ] Lancez tests sécurité: `sudo bash scripts/test_security.sh`
 
 **FORTEMENT RECOMMANDÉ**:
 - [ ] Activez 2FA pour PHP-Admin
@@ -424,6 +475,7 @@ Résultat: **Badge automatique** ✅
 - [ ] Configurez les alertes Wazuh
 - [ ] Mettez en place des backups automatiques
 - [ ] Utilisez un VPN pour administrer
+- [ ] Lisez le guide complet: `docs/HARDENING_GUIDE.md`
 
 ### 📈 Bonnes pratiques
 
@@ -446,6 +498,9 @@ sudo nano /etc/ssh/sshd_config
 # 3. Logs régulièrement audités
 sudo tail -f /var/log/auth.log
 sudo tail -f /var/log/syslog
+
+# 4. Tests sécurité réguliers
+sudo bash scripts/test_security.sh
 ```
 
 ---
@@ -459,7 +514,9 @@ SAE501/
 │   ├── install_radius.sh
 │   ├── install_php_admin.sh
 │   ├── install_wazuh.sh
-│   ├── install_hardening.sh
+│   ├── install_hardening.sh    ⭐ NOUVEAU
+│   ├── test_security.sh        ⭐ NOUVEAU
+│   ├── generate_certificates.sh ⭐ NOUVEAU
 │   ├── diagnostics.sh
 │   ├── show_credentials.sh
 │   └── test_installation.sh
@@ -493,6 +550,7 @@ SAE501/
 ├── docs/                       # Documentation & GitHub Pages
 │   ├── index.md                🎆 Page d'accueil
 │   ├── _config.yml             🎆 Configuration Jekyll
+│   ├── HARDENING_GUIDE.md      ⭐ NOUVEAU
 │   ├── dossier-architecture.md
 │   ├── hardening-linux.md
 │   └── journal-de-bord.md
@@ -517,6 +575,7 @@ SAE501/
 | Wazuh ne répond pas | `sudo systemctl restart wazuh-manager elasticsearch` |
 | Authentification échoue | Vérifier identifiant/mot de passe en PHP-Admin |
 | Connexion Wi-Fi échoue | Vérifier logs: `sudo tail -f /var/log/freeradius/radius.log` |
+| Tests sécurité échouent | Vérifier `docs/HARDENING_GUIDE.md` et relancer `sudo bash scripts/test_security.sh` |
 | GitHub Pages ne s'affiche pas | Vérifier Settings → Pages et attendre 2 min |
 | Tests CI échouent | Vérifier **Actions** pour les erreurs |
 
@@ -531,11 +590,17 @@ sudo bash scripts/install_all.sh
 # Vérifier installation
 bash scripts/test_installation.sh
 
+# Tests sécurité (RECOMMANDÉ)
+sudo bash scripts/test_security.sh
+
 # Voir accès
 bash scripts/show_credentials.sh
 
 # Diagnostics
 bash scripts/diagnostics.sh
+
+# Générer certificats
+sudo bash scripts/generate_certificates.sh
 
 # Rebooter services
 sudo systemctl restart radiusd mysql apache2 php-fpm wazuh-manager
@@ -560,7 +625,9 @@ mysqldump -u root -p radius > backup.sql
 - [ ] Repository SAE501 cloné
 - [ ] `sudo bash scripts/install_all.sh` exécuté
 - [ ] 10/10 tests réussis
+- [ ] 20+/20+ tests sécurité réussis ⭐ NOUVEAU
 - [ ] Mots de passe changés
+- [ ] Certificats SSL/TLS générés ⭐ NOUVEAU
 - [ ] PHP-Admin accessible et fonctionnel
 - [ ] Wazuh accessible et fonctionnel
 - [ ] Routeur configuré (RADIUS Server, secret)
@@ -576,12 +643,13 @@ mysqldump -u root -p radius > backup.sql
 
 ## 📄 Informations importantes
 
-- **Installation défaut": 5-10 minutes avec `install_all.sh`
+- **Installation défaut**: 5-10 minutes avec `install_all.sh`
 - **Durée sans script**: 1-2 heures (manuel)
 - **Production-ready**: 95% après configuration
 - **Support technique**: Voir les logs ou scripts de diagnostics
 - **Documentation en ligne**: https://sfrayan.github.io/SAE501
 - **CI/CD**: Automatique avec GitHub Actions
+- **Guide sécurité complet**: `docs/HARDENING_GUIDE.md` ⭐ NOUVEAU
 
 ---
 
@@ -591,7 +659,10 @@ mysqldump -u root -p radius > backup.sql
 # Commencer l'installation:
 sudo bash scripts/install_all.sh
 
-# Puis consulter les accès:
+# Puis lancer tests sécurité:
+sudo bash scripts/test_security.sh
+
+# Consulter les accès:
 bash scripts/show_credentials.sh
 
 # Et accéder à l'interface:
@@ -599,11 +670,15 @@ http://VOTRE_IP/admin
 
 # Ou consulter la doc en ligne:
 https://sfrayan.github.io/SAE501
+
+# Ou lire le guide de sécurité:
+cat docs/HARDENING_GUIDE.md
 ```
 
-**Bonne chance! Le système est prêt.**
+**Bonne chance! Le système est prêt pour la production. ✅**
 
 ---
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*
-*Dernière mise à jour: 23 janvier 2026*
+*Dernière mise à jour: 25 janvier 2026*
+*Version: 2.0 - Avec hardening sécurité complet*
