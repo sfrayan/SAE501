@@ -310,7 +310,12 @@ DB_USER_PHP=sae501_php
 DB_PASSWORD_PHP='$ADMIN_PASSWORD'
 EOF
 
-chown root:sae501 /opt/sae501/secrets/db.env 2>/dev/null || true
+# Create group if it doesn't exist
+if ! grep -q "^www-data:" /etc/group; then
+    groupadd www-data 2>/dev/null || true
+fi
+
+chown root:www-data /opt/sae501/secrets/db.env 2>/dev/null || chown root:root /opt/sae501/secrets/db.env
 chmod 640 /opt/sae501/secrets/db.env
 log_message "SUCCESS" "Identifiants stockés dans /opt/sae501/secrets/db.env"
 
@@ -332,7 +337,7 @@ fi
 # Insert a test user
 log_message "INFO" "Création d'un utilisateur de test..."
 mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_TEST_USER
-INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'User-Password', ':=', 'password123');
+INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'password123');
 INSERT IGNORE INTO user_status (username, active) VALUES ('testuser', TRUE);
 MYSQL_TEST_USER
 
