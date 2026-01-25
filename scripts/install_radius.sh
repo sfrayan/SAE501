@@ -10,7 +10,7 @@ set -euo pipefail
 LOG_FILE="/var/log/sae501_radius_install.log"
 RADIUS_LOG_DIR="/var/log/sae501/radius"
 DB_ENV_FILE="/opt/sae501/secrets/db.env"
-SCRIPT_DIR="$(cd "$(dirname \"${BASH_SOURCE[0]}\")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 log_message() {
