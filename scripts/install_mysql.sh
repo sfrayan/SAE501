@@ -83,15 +83,108 @@ MYSQL_CREATE_DB
 log_message "SUCCESS" "Base de données RADIUS créée"
 log_message "SUCCESS" "Utilisateur radiususer créé (mot de passe: $RADIUS_PASSWORD)"
 
-# Import RADIUS schema
-log_message "INFO" "Import du schéma FreeRADIUS..."
-if [ -f /etc/freeradius/3.0/mods-config/sql/mysql/schema.sql ]; then
-    mysql -u radiususer -p"$RADIUS_PASSWORD" radius < /etc/freeradius/3.0/mods-config/sql/mysql/schema.sql
-    log_message "SUCCESS" "Schéma RADIUS importé"
-else
-    # Schema might not exist yet if freeradius not installed, that's ok
-    log_message "WARNING" "Schéma RADIUS non trouvé (FreeRADIUS pas encore installé?)"
-fi
+# Create RADIUS schema tables (FreeRADIUS schema)
+log_message "INFO" "Création du schéma RADIUS..."
+mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_RADIUS_SCHEMA
+CREATE TABLE IF NOT EXISTS radcheck (
+  id int(11) unsigned NOT NULL auto_increment,
+  username varchar(64) NOT NULL default '',
+  attribute varchar(64) NOT NULL default '',
+  op char(2) NOT NULL default '==',
+  value varchar(253) NOT NULL default '',
+  PRIMARY KEY  (id),
+  KEY username (username(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radreply (
+  id int(11) unsigned NOT NULL auto_increment,
+  username varchar(64) NOT NULL default '',
+  attribute varchar(64) NOT NULL default '',
+  op char(2) NOT NULL default '=',
+  value varchar(253) NOT NULL default '',
+  PRIMARY KEY  (id),
+  KEY username (username(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radusergroup (
+  username varchar(64) NOT NULL default '',
+  groupname varchar(64) NOT NULL default '',
+  priority int(11) NOT NULL default '1',
+  PRIMARY KEY  (username,groupname),
+  KEY username (username(32)),
+  KEY groupname (groupname(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radgroupcheck (
+  id int(11) unsigned NOT NULL auto_increment,
+  groupname varchar(64) NOT NULL default '',
+  attribute varchar(64) NOT NULL default '',
+  op char(2) NOT NULL default '==',
+  value varchar(253) NOT NULL default '',
+  PRIMARY KEY  (id),
+  KEY groupname (groupname(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radgroupreply (
+  id int(11) unsigned NOT NULL auto_increment,
+  groupname varchar(64) NOT NULL default '',
+  attribute varchar(64) NOT NULL default '',
+  op char(2) NOT NULL default '=',
+  value varchar(253) NOT NULL default '',
+  PRIMARY KEY  (id),
+  KEY groupname (groupname(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radacct (
+  radacctid bigint(21) NOT NULL auto_increment,
+  acctsessionid varchar(64) NOT NULL default '',
+  acctuniqueid varchar(32) NOT NULL default '',
+  username varchar(64) NOT NULL default '',
+  realm varchar(64) default '',
+  nasipaddress varchar(15) NOT NULL default '',
+  nasportid varchar(15) default NULL,
+  nasporttype varchar(32) default NULL,
+  acctstarttime datetime NULL default NULL,
+  acctupdatetime datetime NULL default NULL,
+  acctstoptime datetime NULL default NULL,
+  acctsessiontime int(12) default NULL,
+  acctauthentic varchar(32) default NULL,
+  connectinfo_start varchar(50) default NULL,
+  connectinfo_stop varchar(50) default NULL,
+  acctinputoctets bigint(20) default NULL,
+  acctoutputoctets bigint(20) default NULL,
+  calledstationid varchar(50) default NULL,
+  callingstationid varchar(50) default NULL,
+  acctterminatecause varchar(32) default NULL,
+  servicetype varchar(32) default NULL,
+  framedprotocol varchar(32) default NULL,
+  framedipaddress varchar(15) default NULL,
+  acctstartdelay int(12) default NULL,
+  acctstopdelay int(12) default NULL,
+  xascendsessionsupported int(1) default NULL,
+  PRIMARY KEY  (radacctid),
+  UNIQUE KEY acctuniqueid (acctuniqueid),
+  KEY username (username),
+  KEY framedipaddress (framedipaddress),
+  KEY acctsessionid (acctsessionid),
+  KEY acctstarttime (acctstarttime),
+  KEY acctstoptime (acctstoptime),
+  KEY nasipaddress (nasipaddress)
+) ENGINE=Innodb DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS radpostauth (
+  id int(11) unsigned NOT NULL auto_increment,
+  username varchar(64) NOT NULL default '',
+  pass varchar(64) NOT NULL default '',
+  reply varchar(32) NOT NULL default '',
+  authdate timestamp NOT NULL default CURRENT_TIMESTAMP,
+  PRIMARY KEY  (id),
+  KEY username (username(32))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+MYSQL_RADIUS_SCHEMA
+
+log_message "SUCCESS" "Schéma RADIUS créé"
 
 # Create additional tables for SAE501
 log_message "INFO" "Création des tables SAE501 supplémentaires..."
@@ -175,18 +268,27 @@ log_message "SUCCESS" "Identifiants stockés dans /opt/sae501/secrets/db.env"
 
 # Test connection with new users
 log_message "INFO" "Test de connexion avec radiususer..."
-if mysql -u radiususer -p"$RADIUS_PASSWORD" radius -e "SELECT COUNT(*) FROM mysql.user;" > /dev/null 2>&1; then
+if mysql -u radiususer -p"$RADIUS_PASSWORD" radius -e "SELECT COUNT(*) FROM radcheck;" > /dev/null 2>&1; then
     log_message "SUCCESS" "Connexion radiususer OK"
 else
     error_exit "Impossible de se connecter avec radiususer"
 fi
 
 log_message "INFO" "Test de connexion avec sae501_php..."
-if mysql -u sae501_php -p"$ADMIN_PASSWORD" radius -e "SELECT COUNT(*) FROM mysql.user;" > /dev/null 2>&1; then
+if mysql -u sae501_php -p"$ADMIN_PASSWORD" radius -e "SELECT COUNT(*) FROM radcheck;" > /dev/null 2>&1; then
     log_message "SUCCESS" "Connexion sae501_php OK"
 else
     error_exit "Impossible de se connecter avec sae501_php"
 fi
+
+# Insert a test user
+log_message "INFO" "Création d'un utilisateur de test..."
+mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_TEST_USER
+INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'User-Password', ':=', 'password123');
+INSERT IGNORE INTO user_status (username, active) VALUES ('testuser', TRUE);
+MYSQL_TEST_USER
+
+log_message "SUCCESS" "Utilisateur testuser créé"
 
 log_message "SUCCESS" "Installation MariaDB/MySQL terminée"
 echo ""
