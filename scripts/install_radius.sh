@@ -9,6 +9,8 @@ set -euo pipefail
 LOG_FILE="/var/log/sae501_radius_install.log"
 RADIUS_LOG_DIR="/var/log/sae501/radius"
 DB_ENV_FILE="/opt/sae501/secrets/db.env"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 log_message() {
     local level=$1
@@ -28,6 +30,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 log_message "INFO" "Démarrage de l'installation RADIUS"
+log_message "INFO" "Répertoire du projet: $PROJECT_ROOT"
 
 # Load DB credentials from db.env
 if [ -f "$DB_ENV_FILE" ]; then
@@ -104,13 +107,15 @@ chmod 640 /etc/freeradius/3.0/certs/*.crt /etc/freeradius/3.0/certs/*.key 2>/dev
 # ============================================================================
 log_message "INFO" "Configuration du module EAP (PEAP-MSCHAPv2)..."
 
-# Copy the proper eap.conf template
-if [ -f "./config/eap.conf" ]; then
-    cp ./config/eap.conf /etc/freeradius/3.0/mods-available/eap
+EAP_TEMPLATE="$PROJECT_ROOT/config/eap.conf"
+if [ -f "$EAP_TEMPLATE" ]; then
+    log_message "INFO" "Utilisation du template EAP depuis $EAP_TEMPLATE"
+    cp "$EAP_TEMPLATE" /etc/freeradius/3.0/mods-available/eap
     log_message "SUCCESS" "Module EAP configuré depuis template"
 else
+    log_message "WARNING" "Template $EAP_TEMPLATE non trouvé, utilisation du fallback"
     # Fallback if template doesn't exist
-    sudo tee /etc/freeradius/3.0/mods-available/eap > /dev/null << 'EAPEOF'
+    tee /etc/freeradius/3.0/mods-available/eap > /dev/null << 'EAPEOF'
 eap {
     default_eap_type = peap
     timer_expire = 60
@@ -152,7 +157,7 @@ log_message "SUCCESS" "Modules en conflit supprimés"
 # CRITICAL: Create clean clients.conf file
 # ============================================================================
 log_message "INFO" "Création du fichier clients.conf propre..."
-sudo tee /etc/freeradius/3.0/clients.conf > /dev/null << 'CLIENTS_EOF'
+tee /etc/freeradius/3.0/clients.conf > /dev/null << 'CLIENTS_EOF'
 # FreeRADIUS clients configuration
 # SAE501 Project
 
@@ -187,7 +192,7 @@ if [ ! -L /etc/freeradius/3.0/mods-enabled/sql ]; then
 fi
 
 # Update the existing sql module configuration with our DB credentials
-sudo tee /etc/freeradius/3.0/mods-available/sql > /dev/null << 'SQLEOF'
+tee /etc/freeradius/3.0/mods-available/sql > /dev/null << 'SQLEOF'
 sql {
     driver = "rlm_sql_mysql"
     server = "localhost"
@@ -235,11 +240,11 @@ fi
 # ============================================================================
 log_message "INFO" "Démarrage du service FreeRADIUS..."
 
-sudo systemctl daemon-reload 2>/dev/null || true
-sudo systemctl enable freeradius 2>/dev/null || true
-sudo systemctl stop freeradius 2>/dev/null || true
+systemctl daemon-reload 2>/dev/null || true
+systemctl enable freeradius 2>/dev/null || true
+systemctl stop freeradius 2>/dev/null || true
 sleep 1
-sudo systemctl start freeradius
+systemctl start freeradius
 
 sleep 3
 
@@ -247,7 +252,7 @@ if systemctl is-active freeradius > /dev/null 2>&1; then
     log_message "SUCCESS" "Service FreeRADIUS démarré avec succès"
 else
     log_message "ERROR" "FreeRADIUS ne démarre pas"
-    sudo journalctl -u freeradius -n 10 --no-pager | tee -a "$LOG_FILE"
+    journalctl -u freeradius -n 10 --no-pager | tee -a "$LOG_FILE"
     exit 1
 fi
 
