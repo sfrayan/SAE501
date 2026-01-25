@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================================
-# SAE501 - Installation FreeRADIUS (Automatisée & Stable)
+# SAE501 - Installation FreeRADIUS (Automatisée & Stable - FIXED systemd)
 # ============================================================================
 
 set -euo pipefail
@@ -80,14 +80,29 @@ else
     head -40 /tmp/radius_config_test.log | tee -a "$LOG_FILE"
 fi
 
-# 9. Enable and start service via systemd
+# 9. Deploy systemd override (FIX for Debian 11 daemon mode issue)
+log_msg "Deploying systemd override for FreeRADIUS..."
+mkdir -p /etc/systemd/system/freeradius.service.d
+if [[ -f /opt/SAE501/systemd/freeradius.service.d/override.conf ]]; then
+    cp /opt/SAE501/systemd/freeradius.service.d/override.conf /etc/systemd/system/freeradius.service.d/override.conf
+    log_msg "✓ Systemd override deployed from repo"
+else
+    log_msg "WARNING: systemd override not in repo, creating inline..."
+    cat > /etc/systemd/system/freeradius.service.d/override.conf << 'OVERRIDE_EOF'
+[Service]
+ExecStart=
+ExecStart=/usr/sbin/freeradius -f -lstdout
+OVERRIDE_EOF
+fi
+
+# 10. Enable and start service via systemd
 log_msg "Enabling and starting FreeRADIUS via systemd..."
 systemctl daemon-reload
 systemctl enable freeradius >/dev/null 2>&1 || true
 systemctl restart freeradius || true
 sleep 2
 
-# 10. Check status
+# 11. Check status
 if systemctl is-active --quiet freeradius; then
     log_msg "✓ SUCCESS: FreeRADIUS is running via systemd (ports 1812/1813)"
 else
