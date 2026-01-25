@@ -47,7 +47,16 @@ echo -e "${BLUE}[1/8] Mise à jour du système...${NC}"
 apt-get update -qq
 apt-get upgrade -y -qq
 
-# Installation de RADIUS
+# Installation de MySQL FIRST (needed by RADIUS)
+echo -e "${BLUE}[1.5/8] Installation de MySQL (prérequis RADIUS)...${NC}"
+if bash "$SCRIPT_DIR/install_mysql.sh" "$DB_ROOT_PASS" "$DB_USER" "$DB_PASS"; then
+    echo -e "${GREEN}✓ MySQL installé avec succès${NC}"
+else
+    echo -e "${RED}✗ Erreur lors de l'installation de MySQL${NC}"
+    exit 1
+fi
+
+# Installation de RADIUS (now MySQL is installed)
 echo -e "${BLUE}[2/8] Installation de FreeRADIUS...${NC}"
 if bash "$SCRIPT_DIR/install_radius.sh" "$RADIUS_USER" "$RADIUS_PASS" "$DB_ROOT_PASS" "$DB_USER" "$DB_PASS"; then
     echo -e "${GREEN}✓ FreeRADIUS installé avec succès${NC}"
