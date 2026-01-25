@@ -100,39 +100,45 @@ chmod 750 /etc/freeradius/3.0/certs
 chmod 640 /etc/freeradius/3.0/certs/*.crt /etc/freeradius/3.0/certs/*.key 2>/dev/null || true
 
 # ============================================================================
-# Configure EAP module for PEAP-MSCHAPv2 ONLY
+# Configure EAP module from template
 # ============================================================================
 log_message "INFO" "Configuration du module EAP (PEAP-MSCHAPv2)..."
 
-# Update eap module config - simplified version
-sudo tee /etc/freeradius/3.0/mods-available/eap > /dev/null << 'EAPEOF'
+# Copy the proper eap.conf template
+if [ -f "./config/eap.conf" ]; then
+    cp ./config/eap.conf /etc/freeradius/3.0/mods-available/eap
+    log_message "SUCCESS" "Module EAP configuré depuis template"
+else
+    # Fallback if template doesn't exist
+    sudo tee /etc/freeradius/3.0/mods-available/eap > /dev/null << 'EAPEOF'
 eap {
     default_eap_type = peap
     timer_expire = 60
     ignore_unknown_eap_types = yes
     cisco_accounting_username_bug = no
     max_sessions = 16384
-}
 
-tls-config tls-common {
-    verify_depth = 0
-    ca_path = "/etc/freeradius/3.0/certs"
-    pem_file_type = yes
-    private_key_file = "/etc/freeradius/3.0/certs/server.key"
-    certificate_file = "/etc/freeradius/3.0/certs/server.crt"
-    ca_file = "/etc/freeradius/3.0/certs/ca.crt"
-    dh_file = "/etc/freeradius/3.0/certs/dh"
-}
+    peap {
+        tls = "tls-common"
+        default_eap_type = mschapv2
+    }
 
-peap {
-    tls = tls-common
-    default_eap_type = mschapv2
+    tls-config tls-common {
+        verify_depth = 0
+        ca_path = "/etc/freeradius/3.0/certs"
+        pem_file_type = yes
+        private_key_file = "/etc/freeradius/3.0/certs/server.key"
+        certificate_file = "/etc/freeradius/3.0/certs/server.crt"
+        ca_file = "/etc/freeradius/3.0/certs/ca.crt"
+        dh_file = "/etc/freeradius/3.0/certs/dh"
+    }
 }
 EAPEOF
+    log_message "SUCCESS" "Module EAP configuré (fallback)"
+fi
 
 chown freerad:freerad /etc/freeradius/3.0/mods-available/eap
 chmod 640 /etc/freeradius/3.0/mods-available/eap
-log_message "SUCCESS" "Module EAP configuré"
 
 # ============================================================================
 # Clean up conflicting modules
@@ -220,7 +226,8 @@ log_message "INFO" "Test de la configuration RADIUS..."
 if /usr/sbin/freeradius -C > /dev/null 2>&1; then
     log_message "SUCCESS" "Configuration RADIUS valide"
 else
-    log_message "WARNING" "Test de configuration échoué - continuant"
+    log_message "WARNING" "Test de configuration échoué - vérifiez les erreurs"
+    /usr/sbin/freeradius -X 2>&1 | head -50 | tee -a "$LOG_FILE"
 fi
 
 # ============================================================================
@@ -239,8 +246,9 @@ sleep 3
 if systemctl is-active freeradius > /dev/null 2>&1; then
     log_message "SUCCESS" "Service FreeRADIUS démarré avec succès"
 else
-    log_message "WARNING" "FreeRADIUS ne démarre pas - vérifiez manuellement"
-    sudo journalctl -u freeradius -n 5 --no-pager | tee -a "$LOG_FILE"
+    log_message "ERROR" "FreeRADIUS ne démarre pas"
+    sudo journalctl -u freeradius -n 10 --no-pager | tee -a "$LOG_FILE"
+    exit 1
 fi
 
 log_message "SUCCESS" "Installation RADIUS terminée"
