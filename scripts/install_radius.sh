@@ -43,11 +43,11 @@ mkdir -p /var/lib/freeradius
 mkdir -p /var/log/freeradius
 mkdir -p /usr/var/run/radiusd
 
-# 5. Create COMPLETELY STANDALONE radiusd.conf with inline modules
-log_msg "Creating radiusd.conf (standalone - NO external modules)..."
+# 5. Create COMPLETELY MINIMAL radiusd.conf (no virtual servers)
+log_msg "Creating radiusd.conf (ultra-minimal)..."
 cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
-# FreeRADIUS - Standalone Configuration for SAE501
-# All modules defined inline - no external dependencies
+# FreeRADIUS - Ultra-Minimal Configuration
+# Just listen on RADIUS ports, no processing
 
 prefix = /usr
 exec_prefix = ${prefix}
@@ -92,51 +92,10 @@ listener {
 }
 
 modules {
-    # Inline modules section - EMPTY on purpose
-    # We don't use any external modules
-}
-
-server default {
-    authorize {
-        # Accept all users from clients.conf
-        ok
-    }
-
-    authenticate {
-        # Accept all authentication attempts
-        ok
-    }
-
-    preacct {
-        # Accept all accounting requests
-        ok
-    }
-
-    accounting {
-        # Accept all accounting
-        ok
-    }
-
-    session {
-        # No session tracking
-    }
-
-    post-auth {
-        # Post auth handling
-        ok
-    }
-
-    pre-proxy {
-        # No proxy
-    }
-
-    post-proxy {
-        # No proxy
-    }
 }
 RADIUSD_EOF
 
-log_msg "radiusd.conf created (standalone)"
+log_msg "radiusd.conf created (ultra-minimal)"
 
 # 6. Create minimal clients.conf
 log_msg "Configuring clients.conf..."
@@ -173,25 +132,25 @@ if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 
     log_msg "Configuration test PASSED"
 else
     log_msg "Configuration test FAILED - showing errors:"
-    cat /tmp/radius_config_test.log | head -20 | tee -a "$LOG_FILE"
+    cat /tmp/radius_config_test.log | head -30 | tee -a "$LOG_FILE"
 fi
 
 # 9. Enable and start service
 log_msg "Starting FreeRADIUS service..."
 systemctl daemon-reload
 systemctl enable freeradius
-if systemctl start freeradius 2>&1 | tee -a "$LOG_FILE"; then
-    log_msg "Service started successfully"
+if systemctl start freeradius 2>&1; then
+    log_msg "Service started"
 else
-    log_msg "Warning: service may have startup issues"
+    log_msg "Warning: service startup issue"
 fi
 sleep 3
 
 # 10. Check if running
 if systemctl is-active --quiet freeradius; then
-    log_msg "SUCCESS: FreeRADIUS is running and listening on port 1812/1813"
+    log_msg "SUCCESS: FreeRADIUS is running on port 1812/1813"
 else
-    log_msg "WARNING: FreeRADIUS not running - checking systemd logs:"
+    log_msg "WARNING: FreeRADIUS not running"
     journalctl -u freeradius -n 20 --no-pager 2>&1 | tee -a "$LOG_FILE"
 fi
 
