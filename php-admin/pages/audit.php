@@ -1,156 +1,74 @@
 <?php
 /**
- * SAE501 - Logs d'audit
- * Affichage et gestion des logs de sécurité
+ * Journal d'audit - Contenu pour index.php
  */
 
-require_login();
-
-$filters = [
-    'action' => $_GET['action'] ?? '',
-    'date_from' => $_GET['date_from'] ?? date('Y-m-d', strtotime('-30 days')),
-    'date_to' => $_GET['date_to'] ?? date('Y-m-d'),
-    'status' => $_GET['status'] ?? '',
-];
+$logs = [];
+$error = '';
 
 try {
-    $db = db_connect();
+    // Lire le fichier de log
+    $log_file = dirname(dirname(__FILE__)) . '/logs/admin.log';
     
-    // Construction de la requête avec filtres
-    $query = "SELECT * FROM admin_audit WHERE 1=1";
-    $params = [];
-    
-    if (!empty($filters['action'])) {
-        $query .= " AND action LIKE ?";
-        $params[] = '%' . $filters['action'] . '%';
+    if (file_exists($log_file)) {
+        $lines = array_reverse(file($log_file));
+        $logs = array_slice($lines, 0, 100); // Limiter à 100 lignes
+    } else {
+        $error = 'Fichier de log non trouvé';
     }
-    
-    if (!empty($filters['date_from'])) {
-        $query .= " AND DATE(timestamp) >= ?";
-        $params[] = $filters['date_from'];
-    }
-    
-    if (!empty($filters['date_to'])) {
-        $query .= " AND DATE(timestamp) <= ?";
-        $params[] = $filters['date_to'];
-    }
-    
-    if (!empty($filters['status'])) {
-        $query .= " AND status = ?";
-        $params[] = $filters['status'];
-    }
-    
-    $query .= " ORDER BY timestamp DESC LIMIT 500";
-    
-    $stmt = $db->prepare($query);
-    $stmt->execute($params);
-    $logs = $stmt->fetchAll();
-    
 } catch (Exception $e) {
-    echo '<div class="alert error">Erreur: ' . htmlspecialchars($e->getMessage()) . '</div>';
-    $logs = [];
+    $error = 'Erreur: ' . $e->getMessage();
 }
+
 ?>
+<h2>📄 Journal d'audit</h2>
 
-<h2>Logs d'audit</h2>
+<?php if ($error): ?>
+    <div class="alert error"><?php echo htmlspecialchars($error); ?></div>
+<?php endif; ?>
 
-<div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-    <form method="GET" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
-        <input type="hidden" name="action" value="audit">
-        
-        <div>
-            <label>Action:</label>
-            <input type="text" name="action" value="<?php echo htmlspecialchars($filters['action']); ?>" placeholder="Toutes les actions">
+<div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+    <p style="color: #7f8c8d; font-size: 12px; margin-bottom: 20px;">
+Dernières 100 actions effectuées dans le système
+    </p>
+    
+    <?php if (count($logs) > 0): ?>
+        <div style="font-family: monospace; font-size: 11px; background: #f5f5f5; padding: 15px; border-radius: 4px; max-height: 600px; overflow-y: auto; border: 1px solid #eee;">
+            <?php foreach ($logs as $log): ?>
+                <?php 
+                    $log = trim($log);
+                    if (!empty($log)) {
+                        // Colorer selon le type
+                        $color = '#333';
+                        if (strpos($log, 'ERROR') !== false) {
+                            $color = '#e74c3c';
+                        } elseif (strpos($log, 'WARNING') !== false) {
+                            $color = '#f39c12';
+                        } elseif (strpos($log, 'user_created') !== false || strpos($log, 'user_modified') !== false) {
+                            $color = '#27ae60';
+                        } elseif (strpos($log, 'user_deleted') !== false) {
+                            $color = '#e74c3c';
+                        }
+                ?>
+                <div style="color: <?php echo $color; ?>; margin-bottom: 8px; word-break: break-all; line-height: 1.4;">
+                    <?php echo htmlspecialchars($log); ?>
+                </div>
+                <?php } ?>
+            <?php endforeach; ?>
         </div>
-        
-        <div>
-            <label>Date depuis:</label>
-            <input type="date" name="date_from" value="<?php echo htmlspecialchars($filters['date_from']); ?>">
+    <?php else: ?>
+        <div style="text-align: center; padding: 40px; color: #999;">
+            <p>Aucun événement enregistré</p>
         </div>
-        
-        <div>
-            <label>Date jusqu'à:</label>
-            <input type="date" name="date_to" value="<?php echo htmlspecialchars($filters['date_to']); ?>">
-        </div>
-        
-        <div>
-            <label>Statut:</label>
-            <select name="status">
-                <option value="">Tous les statuts</option>
-                <option value="success" <?php echo $filters['status'] === 'success' ? 'selected' : ''; ?>>Succès</option>
-                <option value="failure" <?php echo $filters['status'] === 'failure' ? 'selected' : ''; ?>>Erreur</option>
-                <option value="info" <?php echo $filters['status'] === 'info' ? 'selected' : ''; ?>>Info</option>
-            </select>
-        </div>
-        
-        <div style="grid-column: span 4;">
-            <button type="submit" style="padding: 8px 15px; background: #3498db; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                Filtrer
-            </button>
-            <a href="?action=audit" style="padding: 8px 15px; background: #95a5a6; color: white; text-decoration: none; border-radius: 3px; margin-left: 10px;">
-                Réinitialiser
-            </a>
-        </div>
-    </form>
+    <?php endif; ?>
 </div>
 
-<table>
-    <thead>
-        <tr>
-            <th>Timestamp</th>
-            <th>Admin</th>
-            <th>Action</th>
-            <th>Cible</th>
-            <th>Statut</th>
-            <th>IP</th>
-            <th>Détails</th>
-        </tr>
-    </thead>
-    <tbody>
-        <?php if (empty($logs)): ?>
-            <tr>
-                <td colspan="7" style="text-align: center; padding: 20px; color: #999;">
-                    Aucun log trouvé
-                </td>
-            </tr>
-        <?php else: ?>
-            <?php foreach ($logs as $log): ?>
-                <tr>
-                    <td style="font-size: 12px;"><?php echo htmlspecialchars($log['timestamp']); ?></td>
-                    <td><?php echo htmlspecialchars($log['admin_user'] ?? 'N/A'); ?></td>
-                    <td>
-                        <span style="padding: 3px 8px; background: #e3f2fd; color: #1976d2; border-radius: 3px; font-size: 12px;">
-                            <?php echo htmlspecialchars($log['action']); ?>
-                        </span>
-                    </td>
-                    <td><?php echo htmlspecialchars($log['target_user'] ?? '-'); ?></td>
-                    <td>
-                        <?php
-                        $status_colors = [
-                            'success' => '#d4edda',
-                            'failure' => '#f8d7da',
-                            'info' => '#d1ecf1',
-                        ];
-                        $status_text_colors = [
-                            'success' => '#155724',
-                            'failure' => '#721c24',
-                            'info' => '#0c5460',
-                        ];
-                        $bg = $status_colors[$log['status']] ?? '#f0f0f0';
-                        $text = $status_text_colors[$log['status']] ?? '#333';
-                        ?>
-                        <span style="padding: 3px 8px; background: <?php echo $bg; ?>; color: <?php echo $text; ?>; border-radius: 3px; font-size: 12px;">
-                            <?php echo htmlspecialchars($log['status']); ?>
-                        </span>
-                    </td>
-                    <td style="font-family: monospace; font-size: 12px;"><?php echo htmlspecialchars($log['ip_address'] ?? 'N/A'); ?></td>
-                    <td style="font-size: 12px;"><?php echo htmlspecialchars(substr($log['details'] ?? '', 0, 50)); ?></td>
-                </tr>
-            <?php endforeach; ?>
-        <?php endif; ?>
-    </tbody>
-</table>
-
-<div style="margin-top: 20px; text-align: right; font-size: 12px; color: #666;">
-    Total: <?php echo count($logs); ?> entrée(s) affichée(s) (max 500)
+<div style="margin-top: 20px; padding: 15px; background: #f9f9f9; border-radius: 4px; font-size: 12px; color: #7f8c8d;">
+    <h4 style="margin-top: 0; color: #333;">🔐 Sécurité</h4>
+    <ul style="margin: 10px 0; padding-left: 20px;">
+        <li>Tous les accès sont enregistrés</li>
+        <li>Les mots de passe ne sont jamais affichés dans les logs</li>
+        <li>Les journaux sont conservés pendant 90 jours</li>
+        <li>L'accès à cette page est réservé aux administrateurs</li>
+    </ul>
 </div>
