@@ -57,7 +57,18 @@ fi
 log_message "SUCCESS" "$SERVICE_NAME démarré"
 
 # Wait for MySQL to be ready
-sleep 2
+sleep 3
+
+# Clean up any existing installation
+log_message "INFO" "Nettoyage des installations précédentes..."
+mysql -u root << MYSQL_CLEANUP
+DROP DATABASE IF EXISTS radius;
+DROP USER IF EXISTS 'radiususer'@'localhost';
+DROP USER IF EXISTS 'sae501_php'@'localhost';
+FLUSH PRIVILEGES;
+MYSQL_CLEANUP
+
+log_message "INFO" "Données précédentes nettoyées"
 
 # Secure MariaDB installation
 log_message "INFO" "Sécurisation de MariaDB/MySQL..."
@@ -78,7 +89,7 @@ log_message "SUCCESS" "MariaDB/MySQL sécurisée"
 log_message "INFO" "Création de la base de données RADIUS et utilisateur..."
 mysql -u root << MYSQL_CREATE_DB
 CREATE DATABASE IF NOT EXISTS radius DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'radiususer'@'localhost' IDENTIFIED BY '$RADIUS_PASSWORD';
+CREATE USER 'radiususer'@'localhost' IDENTIFIED BY '$RADIUS_PASSWORD';
 GRANT ALL PRIVILEGES ON radius.* TO 'radiususer'@'localhost';
 FLUSH PRIVILEGES;
 MYSQL_CREATE_DB
@@ -257,7 +268,7 @@ log_message "SUCCESS" "Tables SAE501 créées"
 # Create MariaDB user for PHP admin interface
 log_message "INFO" "Création de l'utilisateur PHP admin..."
 mysql -u root << MYSQL_CREATE_PHPUSER
-CREATE USER IF NOT EXISTS 'sae501_php'@'localhost' IDENTIFIED BY '$ADMIN_PASSWORD';
+CREATE USER 'sae501_php'@'localhost' IDENTIFIED BY '$ADMIN_PASSWORD';
 GRANT SELECT, INSERT, UPDATE ON radius.radcheck TO 'sae501_php'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON radius.radreply TO 'sae501_php'@'localhost';
 GRANT SELECT, INSERT, UPDATE ON radius.radusergroup TO 'sae501_php'@'localhost';
