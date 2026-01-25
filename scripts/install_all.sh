@@ -163,9 +163,9 @@ if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
 fi
 
 # 10. Résumé final
-echo -e "\n${GREEN}╔════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  ✓ INSTALLATION TERMINÉE !              ║${NC}"
-echo -e "${GREEN}╚════════════════════════════════════════╝${NC}\n"
+echo -e "\n${GREEN}▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐${NC}"
+echo -e "${GREEN}▐  ✓ INSTALLATION TERMINÉE !              ▐${NC}"
+echo -e "${GREEN}▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐${NC}\n"
 
 echo -e "${BLUE}🌐 ACCÈS AUX SERVICES (NAT VM):${NC}"
 echo "  ✅ Apache2:        http://localhost/ (sur la VM)"
