@@ -2,6 +2,7 @@
 # ============================================================================
 # SAE501 - Installation et configuration FreeRADIUS avec MySQL
 # PEAP-MSCHAPv2, logging centralisé, interface web-ready
+# FIXED: Better error handling and configuration validation
 # ============================================================================
 
 set -euo pipefail
@@ -9,7 +10,7 @@ set -euo pipefail
 LOG_FILE="/var/log/sae501_radius_install.log"
 RADIUS_LOG_DIR="/var/log/sae501/radius"
 DB_ENV_FILE="/opt/sae501/secrets/db.env"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname \"${BASH_SOURCE[0]}\")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 log_message() {
@@ -222,6 +223,7 @@ sql {
     
     query_timeout = 30
     connect_timeout = 3
+    
     read_groups = yes
     read_profiles = yes
     read_clients = yes
@@ -236,14 +238,21 @@ chown freerad:freerad /etc/freeradius/3.0/mods-available/sql
 chmod 640 /etc/freeradius/3.0/mods-available/sql
 
 # ============================================================================
-# Test configuration
+# Test configuration - FULL OUTPUT
 # ============================================================================
 log_message "INFO" "Test de la configuration RADIUS..."
-if /usr/sbin/freeradius -C > /dev/null 2>&1; then
+
+TEST_OUTPUT=$(/usr/sbin/freeradius -C 2>&1) || true
+
+if echo "$TEST_OUTPUT" | grep -q "Configuration appears to be OK"; then
     log_message "SUCCESS" "Configuration RADIUS valide"
 else
-    log_message "WARNING" "Test de configuration échoué - vérifiez les erreurs"
-    /usr/sbin/freeradius -X 2>&1 | head -50 | tee -a "$LOG_FILE"
+    log_message "WARNING" "Test de configuration - Analyse des erreurs..."
+    # Show full output for debugging
+    echo "$TEST_OUTPUT" | tee -a "$LOG_FILE"
+    
+    # Continue installation even if there are warnings
+    # FreeRADIUS can still start with some warnings
 fi
 
 # ============================================================================
@@ -255,16 +264,19 @@ systemctl daemon-reload 2>/dev/null || true
 systemctl enable freeradius 2>/dev/null || true
 systemctl stop freeradius 2>/dev/null || true
 sleep 1
-systemctl start freeradius
+systemctl start freeradius || true
 
 sleep 3
 
 if systemctl is-active freeradius > /dev/null 2>&1; then
     log_message "SUCCESS" "Service FreeRADIUS démarré avec succès"
 else
-    log_message "ERROR" "FreeRADIUS ne démarre pas"
-    journalctl -u freeradius -n 10 --no-pager | tee -a "$LOG_FILE"
-    exit 1
+    log_message "ERROR" "FreeRADIUS ne démarre pas - Vérification des logs..."
+    journalctl -u freeradius -n 20 --no-pager | tee -a "$LOG_FILE"
+    # Show debug info
+    log_message "INFO" "Tentative de diagnostic avec mode debug..."
+    timeout 5 /usr/sbin/freeradius -X 2>&1 | head -100 | tee -a "$LOG_FILE" || true
+    error_exit "FreeRADIUS ne peut pas démarrer. Vérifiez les logs ci-dessus."
 fi
 
 log_message "SUCCESS" "Installation RADIUS terminée"
