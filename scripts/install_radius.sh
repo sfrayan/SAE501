@@ -123,11 +123,6 @@ eap {
     cisco_accounting_username_bug = no
     max_sessions = 16384
 
-    peap {
-        tls = "tls-common"
-        default_eap_type = mschapv2
-    }
-
     tls-config tls-common {
         verify_depth = 0
         ca_path = "/etc/freeradius/3.0/certs"
@@ -136,6 +131,12 @@ eap {
         certificate_file = "/etc/freeradius/3.0/certs/server.crt"
         ca_file = "/etc/freeradius/3.0/certs/ca.crt"
         dh_file = "/etc/freeradius/3.0/certs/dh"
+    }
+
+    peap {
+        tls = "tls-common"
+        default_eap_type = mschapv2
+        virtual_server = "inner-tunnel"
     }
 }
 EAPEOF
@@ -191,8 +192,18 @@ if [ ! -L /etc/freeradius/3.0/mods-enabled/sql ]; then
     ln -s ../mods-available/sql /etc/freeradius/3.0/mods-enabled/sql
 fi
 
-# Update the existing sql module configuration with our DB credentials
-tee /etc/freeradius/3.0/mods-available/sql > /dev/null << 'SQLEOF'
+# Use SQL config template if available
+SQL_TEMPLATE="$PROJECT_ROOT/config/sql.conf"
+if [ -f "$SQL_TEMPLATE" ]; then
+    log_message "INFO" "Utilisation du template SQL depuis $SQL_TEMPLATE"
+    cp "$SQL_TEMPLATE" /etc/freeradius/3.0/mods-available/sql
+    # Replace placeholder with actual password
+    sed -i "s|PLACEHOLDER_PASSWORD|${DB_PASSWORD}|g" /etc/freeradius/3.0/mods-available/sql
+    log_message "SUCCESS" "Module SQL configuré depuis template"
+else
+    log_message "WARNING" "Template SQL non trouvé, utilisation de configuration minimale"
+    # Fallback if template doesn't exist
+    tee /etc/freeradius/3.0/mods-available/sql > /dev/null << 'SQLEOF'
 sql {
     driver = "rlm_sql_mysql"
     server = "localhost"
@@ -216,13 +227,13 @@ sql {
     read_clients = yes
 }
 SQLEOF
-
-# Now replace the placeholder with actual password
-sed -i "s|PLACEHOLDER_PASSWORD|${DB_PASSWORD}|g" /etc/freeradius/3.0/mods-available/sql
+    # Replace placeholder with actual password
+    sed -i "s|PLACEHOLDER_PASSWORD|${DB_PASSWORD}|g" /etc/freeradius/3.0/mods-available/sql
+    log_message "SUCCESS" "Module SQL configuré (fallback)"
+fi
 
 chown freerad:freerad /etc/freeradius/3.0/mods-available/sql
 chmod 640 /etc/freeradius/3.0/mods-available/sql
-log_message "SUCCESS" "Module SQL configuré"
 
 # ============================================================================
 # Test configuration
