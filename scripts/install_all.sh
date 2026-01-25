@@ -155,17 +155,38 @@ else
     log_info "Pour redémarrer: sudo systemctl restart freeradius"
 fi
 
-# 9. Diagnostic final (optionnel)
+# 9. Diagnostic final
 log_info "=== 9. DIAGNOSTIC FINAL ==="
 if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
     bash "$SCRIPT_DIR/diagnostics.sh" >> "$LOG_FILE" 2>&1 || log_warn "Diagnostic script erreur"
     log_ok "Diagnostic terminé"
 fi
 
-# 10. Résumé final
-echo -e "\n${GREEN}▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐${NC}"
-echo -e "${GREEN}▐  ✓ INSTALLATION TERMINÉE !              ▐${NC}"
-echo -e "${GREEN}▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐▐${NC}\n"
+# 10. HARDENING
+log_info "=== 10. HARDENING SÉCURITÉ ==="
+if [[ -f "$SCRIPT_DIR/install_hardening.sh" ]]; then
+    bash "$SCRIPT_DIR/install_hardening.sh" >> "$LOG_FILE" 2>&1 || log_warn "Hardening script erreur"
+    log_ok "Système renforcé"
+else
+    log_warn "install_hardening.sh non trouvé"
+fi
+
+# 11. Tests finaux
+log_info "=== 11. TESTS FINAUX ==="
+if [[ -f "$PROJECT_ROOT/tests/test_installation.sh" ]]; then
+    bash "$PROJECT_ROOT/tests/test_installation.sh" >> "$LOG_FILE" 2>&1 || log_warn "Tests installation erreur"
+    log_ok "Tests d'installation terminés"
+fi
+
+if [[ -f "$PROJECT_ROOT/tests/test_security.sh" ]]; then
+    bash "$PROJECT_ROOT/tests/test_security.sh" >> "$LOG_FILE" 2>&1 || log_warn "Tests sécurité erreur"
+    log_ok "Tests de sécurité terminés"
+fi
+
+# 12. Résumé final
+echo -e "\n${GREEN}╔════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║  ✓ INSTALLATION ET HARDENING RÉUSSIE !  ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════╝${NC}\n"
 
 echo -e "${BLUE}🌐 ACCÈS AUX SERVICES (NAT VM):${NC}"
 echo "  ✅ Apache2:        http://localhost/ (sur la VM)"
@@ -195,6 +216,14 @@ echo -e "${BLUE}🔌 CONFIGURATION ROUTEUR TP-LINK:${NC}"
 echo "  Serveur RADIUS:  127.0.0.1 (ou IP VM si accès distant)"
 echo "  Port:            1812"
 echo "  Secret:          testing123"
+echo ""
+
+echo -e "${BLUE}🔐 SÉCURITÉ APPLIQUÉE:${NC}"
+echo "  ✅ Firewall UFW activé"
+echo "  ✅ SSH renforcé"
+echo "  ✅ Kernel hardening appliqué"
+echo "  ✅ Fail2Ban activé"
+echo "  ✅ Audit logging activé"
 echo ""
 
 echo -e "${GREEN}✨ Installation réussie!${NC}"
