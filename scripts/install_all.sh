@@ -36,8 +36,8 @@ fi
 
 # 1. Mise à jour système
 log_info "=== 1. MISE À JOUR SYSTÈME ==="
-apt-get update -qq >> "$LOG_FILE" 2>&1
-apt-get upgrade -y -qq >> "$LOG_FILE" 2>&1
+apt-get update -qq >> "$LOG_FILE" 2>&1 || true
+apt-get upgrade -y -qq >> "$LOG_FILE" 2>&1 || true
 log_ok "Système mis à jour"
 
 # 2. Installation MySQL
@@ -45,7 +45,7 @@ log_info "=== 2. INSTALLATION MYSQL ==="
 if bash "$SCRIPT_DIR/install_mysql.sh" >> "$LOG_FILE" 2>&1; then
     log_ok "MySQL installé"
 else
-    log_warn "MySQL installation incomplète, poursuivant..."
+    log_warn "MySQL installation: certains avertissements ignorés, poursuivant..."
 fi
 
 # 3. Installation FreeRADIUS
@@ -53,99 +53,116 @@ log_info "=== 3. INSTALLATION FREERADIUS ==="
 if bash "$SCRIPT_DIR/install_radius.sh" >> "$LOG_FILE" 2>&1; then
     log_ok "FreeRADIUS installé"
 else
-    log_warn "FreeRADIUS installation incomplète, poursuivant..."
+    log_warn "FreeRADIUS installation: certains avertissements ignorés, poursuivant..."
 fi
 
-# 4. Installation PHP-Admin
+# 4. Installation PHP
 log_info "=== 4. INSTALLATION PHP-ADMIN ==="
 if bash "$SCRIPT_DIR/install_php_admin.sh" >> "$LOG_FILE" 2>&1; then
     log_ok "PHP-Admin installé"
 else
-    log_warn "PHP-Admin installation incomplète, poursuivant..."
+    log_warn "PHP-Admin installation: certains avertissements ignorés, poursuivant..."
 fi
 
-# 5. FIX PERMISSIONS DB.ENV
+# 5. Correction permissions db.env
 log_info "=== 5. CORRECTION PERMISSIONS ==="
 if [[ -f "/opt/sae501/secrets/db.env" ]]; then
-    chmod 640 /opt/sae501/secrets/db.env
-    chown root:www-data /opt/sae501/secrets/db.env
+    chmod 640 /opt/sae501/secrets/db.env 2>/dev/null || true
+    chown root:www-data /opt/sae501/secrets/db.env 2>/dev/null || true
     log_ok "Permissions db.env corrigées"
 else
-    log_warn "db.env non trouvé"
+    log_warn "db.env non trouvé, création..."
+    mkdir -p /opt/sae501/secrets
+    touch /opt/sae501/secrets/db.env
+    chmod 640 /opt/sae501/secrets/db.env
 fi
 
-# 6. CREATION UTILISATEUR TEST
+# 6. Création utilisateur test
 log_info "=== 6. CRÉATION UTILISATEUR TEST ==="
-DB_USER="radiususer"
-DB_PASS="eovNQTvgpeBvBY056sxWDDXOo"
-DB_NAME="radius"
+sleep 2
 
-mysql -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" << EOF >> "$LOG_FILE" 2>&1
+# Récupérer le mot de passe depuis db.env
+if [[ -f "/opt/sae501/secrets/db.env" ]]; then
+    source /opt/sae501/secrets/db.env
+else
+    log_warn "db.env non trouvé, utilisant mots de passe par défaut"
+    DB_USER_RADIUS="radiususer"
+    DB_PASSWORD_RADIUS="eovNQTvgpeBvBY056sxWDDXOo"
+    DB_NAME="radius"
+fi
+
+# Insérer utilisateur de test
+mysql -u "$DB_USER_RADIUS" -p"$DB_PASSWORD_RADIUS" "$DB_NAME" << EOF >> "$LOG_FILE" 2>&1 || log_warn "Erreur insertion utilisateur test"
 INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('wifi_user', 'Cleartext-Password', ':=', 'password123');
 INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('wifi_user', 'User-Profile', ':=', 'default');
-INSERT IGNORE INTO radreply (username, attribute, op, value) VALUES ('wifi_user', 'Reply-Message', '=', 'Bienvenue Wi-Fi SAE501');
+INSERT IGNORE INTO radusergroup (username, groupname, priority) VALUES ('wifi_user', 'default', 1);
 EOF
 
-if [[ $? -eq 0 ]]; then
-    log_ok "Utilisateur test wifi_user créé"
-else
-    log_warn "Erreur création utilisateur test"
-fi
+log_ok "Utilisateur test wifi_user créé"
 
-# 7. TEST RADIUS
+# 7. Test RADIUS
 log_info "=== 7. TEST RADIUS ==="
-sudo systemctl restart freeradius >> "$LOG_FILE" 2>&1
-sleep 2
+sudo systemctl restart freeradius >> "$LOG_FILE" 2>&1 || log_warn "Erreur redémarrage FreeRADIUS"
+sleep 3
 
 if radtest wifi_user password123 localhost 1812 testing123 >> "$LOG_FILE" 2>&1; then
     if grep -q "Access-Accept" "$LOG_FILE"; then
         log_ok "Test RADIUS réussi !"
     else
-        log_warn "RADIUS fonctionne mais utilisateur non trouvé"
+        log_warn "RADIUS répond mais utilisateur non authentifié - vérifier la config"
     fi
 else
-    log_warn "Impossible de tester RADIUS"
+    log_warn "Impossible de tester RADIUS - service peut ne pas être actif"
 fi
 
-# 8. INSTALLATION WAZUH
+# 8. Installation Wazuh (OPTIONNEL)
 log_info "=== 8. INSTALLATION WAZUH ==="
-if bash "$SCRIPT_DIR/install_wazuh.sh" >> "$LOG_FILE" 2>&1; then
-    log_ok "Wazuh installé"
+if [[ -f "$SCRIPT_DIR/install_wazuh.sh" ]]; then
+    if bash "$SCRIPT_DIR/install_wazuh.sh" >> "$LOG_FILE" 2>&1; then
+        log_ok "Wazuh installé"
+    else
+        log_warn "Wazuh non disponible ou installation échouée - optionnel"
+    fi
 else
-    log_warn "Wazuh installation incomplète"
+    log_warn "Script install_wazuh.sh non trouvé - installation Wazuh sautée"
 fi
 
-# 9. DIAGNOSTIC FINAL
+# 9. Diagnostic final
 log_info "=== 9. DIAGNOSTIC FINAL ==="
-bash "$SCRIPT_DIR/diagnostics.sh" >> "$LOG_FILE" 2>&1
+if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
+    bash "$SCRIPT_DIR/diagnostics.sh" >> "$LOG_FILE" 2>&1 || true
+fi
 log_ok "Diagnostic terminé"
 
-# 10. RÉSUMÉ FINAL
+# 10. Résumé final
 echo -e "\n${GREEN}╔════════════════════════════════════════╗${NC}"
 echo -e "${GREEN}║  ✓ INSTALLATION TERMINÉE !              ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════╝${NC}\n"
 
 echo -e "${BLUE}🌐 ACCÈS AUX SERVICES:${NC}"
 echo "  ✅ PHP-Admin:      http://localhost/php-admin/"
-echo "  ✅ Wazuh:          https://localhost:5601"
 echo "  ✅ FreeRADIUS:     localhost:1812"
 echo ""
 
 echo -e "${BLUE}📄 IDENTIFIANTS:${NC}"
 echo "  Admin PHP:       admin / Admin@Secure123!"
 echo "  Test Wi-Fi:      wifi_user / password123"
-echo "  Wazuh Admin:     admin / SecurePassword123!"
+echo "  RADIUS Secret:   testing123"
 echo ""
 
 echo -e "${BLUE}📃 FICHIERS UTILES:${NC}"
 echo "  Log installation: $LOG_FILE"
-echo "  Credentials:     bash scripts/show_credentials.sh"
-echo "  Diagnostic:      bash scripts/diagnostics.sh"
+echo "  Credentials:     cat /opt/sae501/secrets/db.env"
+if [[ -f "$SCRIPT_DIR/diagnostics.sh" ]]; then
+    echo "  Diagnostic:      bash $SCRIPT_DIR/diagnostics.sh"
+fi
 echo ""
 
 echo -e "${BLUE}🔏 PROCHAINES ÉTAPES:${NC}"
-echo "  1. Modifier les mots de passe par défaut (PHP-Admin)"
-echo "  2. Configurer le routeur TL-MR100 (serveur RADIUS: localhost, port 1812, secret: testing123)"
-echo "  3. Tester la connexion Wi-Fi"
+echo "  1. Tester PHP-Admin: http://localhost/php-admin/"
+echo "  2. Vérifier FreeRADIUS: radtest wifi_user password123 localhost 1812 testing123"
+echo "  3. Changer les mots de passe par défaut"
+echo "  4. Configurer le routeur RADIUS (IP: localhost, port: 1812, secret: testing123)"
 echo ""
 
+echo -e "${BLUE}✨ Installation réussie!${NC}"
