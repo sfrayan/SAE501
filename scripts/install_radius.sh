@@ -67,7 +67,8 @@ chmod 750 "$RADIUS_LOG_DIR"
 # ============================================================================
 log_message "INFO" "Nettoyage des modules en conflit..."
 rm -f /etc/freeradius/3.0/mods-enabled/eap-peap
-log_message "SUCCESS" "eap-peap supprimé (conflit avec eap)"
+rm -f /etc/freeradius/3.0/mods-enabled/sql-sae501
+log_message "SUCCESS" "Modules en conflit supprimés"
 
 # ============================================================================
 # CRITICAL: Create clean clients.conf file
@@ -102,19 +103,19 @@ log_message "SUCCESS" "clients.conf créé"
 # ============================================================================
 log_message "INFO" "Configuration du module SQL..."
 
-cd /etc/freeradius/3.0/mods-enabled
-if [ ! -L "sql" ]; then
-    ln -s ../mods-available/sql sql
+# Enable sql module if not already enabled
+if [ ! -L /etc/freeradius/3.0/mods-enabled/sql ]; then
+    ln -s ../mods-available/sql /etc/freeradius/3.0/mods-enabled/sql
 fi
 
-# Create SQL module configuration
-sudo tee /etc/freeradius/3.0/mods-available/sql-sae501 > /dev/null << SQLEOF
+# Update the existing sql module configuration with our DB credentials
+sudo tee /etc/freeradius/3.0/mods-available/sql > /dev/null << 'SQLEOF'
 sql {
     driver = "rlm_sql_mysql"
     server = "localhost"
     port = 3306
     login = "radiususer"
-    password = "$DB_PASSWORD"
+    password = "PLACEHOLDER_PASSWORD"
     radius_db = "radius"
     
     pool {
@@ -133,12 +134,11 @@ sql {
 }
 SQLEOF
 
-chown freerad:freerad /etc/freeradius/3.0/mods-available/sql-sae501
-chmod 640 /etc/freeradius/3.0/mods-available/sql-sae501
+# Now replace the placeholder with actual password
+sed -i "s|PLACEHOLDER_PASSWORD|${DB_PASSWORD}|g" /etc/freeradius/3.0/mods-available/sql
 
-if [ ! -L "/etc/freeradius/3.0/mods-enabled/sql-sae501" ]; then
-    ln -s ../mods-available/sql-sae501 /etc/freeradius/3.0/mods-enabled/sql-sae501
-fi
+chown freerad:freerad /etc/freeradius/3.0/mods-available/sql
+chmod 640 /etc/freeradius/3.0/mods-available/sql
 log_message "SUCCESS" "Module SQL configuré"
 
 # ============================================================================
