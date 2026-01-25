@@ -118,31 +118,51 @@ log_info "================================"
 run_install_script "install_mysql.sh"
 echo ""
 
-# Step 3: FreeRADIUS
+# Step 3: Wait for MySQL to be fully ready
+log_info "Waiting for MySQL to be fully ready (5 seconds)..."
+sleep 5
+
+# Verify MySQL is actually running before continuing
+log_info "Verifying MySQL is running..."
+for i in {1..10}; do
+    if systemctl is-active --quiet mysql 2>/dev/null || systemctl is-active --quiet mariadb 2>/dev/null; then
+        log_success "MySQL verified running"
+        break
+    elif [ $i -lt 10 ]; then
+        log_warning "MySQL startup attempt $i/10..."
+        sleep 2
+    else
+        log_error "MySQL failed to start after multiple attempts"
+        FAILED_STEPS+=("mysql-verification")
+    fi
+done
+echo ""
+
+# Step 4: FreeRADIUS
 log_info "Step 3: FreeRADIUS Installation"
 log_info "================================"
 run_install_script "install_radius.sh"
 echo ""
 
-# Step 4: Web Admin Interface
+# Step 5: Web Admin Interface
 log_info "Step 4: PHP-Admin Web Interface Installation"
 log_info "========================================"
 run_install_script "install_php_admin.sh"
 echo ""
 
-# Step 5: System Hardening
+# Step 6: System Hardening
 log_info "Step 5: System Hardening"
 log_info "========================"
 run_install_script "install_hardening.sh"
 echo ""
 
-# Step 6: SSL/TLS Certificates
+# Step 7: SSL/TLS Certificates
 log_info "Step 6: SSL/TLS Certificate Generation"
 log_info "======================================"
 run_install_script "generate_certificates.sh"
 echo ""
 
-# Step 7: Monitoring (optional - may fail in isolated environment)
+# Step 8: Monitoring (optional - may fail in isolated environment)
 log_info "Step 7: Monitoring Setup (Optional)"
 log_info "==================================="
 run_install_script "install_wazuh.sh" || log_warning "Wazuh setup skipped or failed (this is optional)"
@@ -162,13 +182,22 @@ if systemctl is-active --quiet mysql 2>/dev/null || systemctl is-active --quiet 
 else
     log_warning "⚠ MySQL/MariaDB not running (will try to start)"
     systemctl start mysql 2>/dev/null || systemctl start mariadb 2>/dev/null || true
+    sleep 2
 fi
 
 # Check FreeRADIUS
 if systemctl is-active --quiet freeradius 2>/dev/null; then
     log_success "✓ FreeRADIUS is running"
 else
-    log_warning "⚠ FreeRADIUS not running"
+    log_warning "⚠ FreeRADIUS not running - attempting restart"
+    systemctl restart freeradius 2>/dev/null || true
+    sleep 2
+    if systemctl is-active --quiet freeradius 2>/dev/null; then
+        log_success "✓ FreeRADIUS is now running"
+    else
+        log_error "✗ FreeRADIUS failed to start"
+        FAILED_STEPS+=("freeradius")
+    fi
 fi
 
 # Check Apache
