@@ -115,9 +115,23 @@ for i in {1..5}; do
     fi
 done
 
-# Create RADIUS schema tables (FreeRADIUS schema)
+# Create RADIUS schema tables (FreeRADIUS schema) - INCLUDES NAS TABLE
 log_message "INFO" "Création du schéma RADIUS..."
-mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_RADIUS_SCHEMA
+mysql -u radiususer -p"$RADIUS_PASSWORD" radius << 'MYSQL_RADIUS_SCHEMA'
+CREATE TABLE IF NOT EXISTS nas (
+  id int(10) unsigned NOT NULL auto_increment,
+  nasname varchar(128) NOT NULL,
+  shortname varchar(32),
+  type varchar(30) NOT NULL default 'other',
+  ports int(5),
+  secret varchar(60) NOT NULL default 'secret',
+  server varchar(64),
+  community varchar(50),
+  description varchar(200) default 'RADIUS Client',
+  PRIMARY KEY  (id),
+  KEY nasname (nasname)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE IF NOT EXISTS radcheck (
   id int(11) unsigned NOT NULL auto_increment,
   username varchar(64) NOT NULL default '',
@@ -213,7 +227,6 @@ CREATE TABLE IF NOT EXISTS radpostauth (
   PRIMARY KEY  (id),
   KEY username (username(32))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
 MYSQL_RADIUS_SCHEMA
 
 log_message "SUCCESS" "Schéma RADIUS créé"
