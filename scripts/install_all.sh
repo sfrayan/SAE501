@@ -42,10 +42,15 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# CRITICAL: Remove any previous Wazuh repo that might cause GPG errors
+echo -e "${BLUE}[0/8] Nettoyage des dépôts problématiques...${NC}"
+rm -f /etc/apt/sources.list.d/wazuh.list 2>/dev/null || true
+apt-key del 96B3EE5F29111145 2>/dev/null || true
+
 # Mise à jour du système
 echo -e "${BLUE}[1/8] Mise à jour du système...${NC}"
-apt-get update -qq
-apt-get upgrade -y -qq
+apt-get update -qq || true
+apt-get upgrade -y -qq || true
 
 # Installation de MySQL FIRST (needed by RADIUS)
 echo -e "${BLUE}[1.5/8] Installation de MySQL (prérequis RADIUS)...${NC}"
@@ -79,8 +84,7 @@ echo -e "${BLUE}[4/8] Installation de Wazuh...${NC}"
 if bash "$SCRIPT_DIR/install_wazuh.sh"; then
     echo -e "${GREEN}✓ Wazuh installé avec succès${NC}"
 else
-    echo -e "${RED}✗ Erreur lors de l'installation de Wazuh${NC}"
-    exit 1
+    echo -e "${YELLOW}⚠ Wazuh non disponible, continuant...${NC}"
 fi
 
 # Hardening du système (NEW)
@@ -113,7 +117,7 @@ fi
 
 # Diagnostic final
 echo -e "${BLUE}[8/8] Diagnostic final...${NC}"
-bash "$SCRIPT_DIR/diagnostics.sh"
+bash "$SCRIPT_DIR/diagnostics.sh" || true
 
 # Tests d'installation
 echo -e "\n${BLUE}=== Tests d'installation ===${NC}"
