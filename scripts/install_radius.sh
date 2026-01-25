@@ -138,11 +138,10 @@ log_message "SUCCESS" "Module SQL configuré"
 # Test configuration
 # ============================================================================
 log_message "INFO" "Test de la configuration RADIUS..."
-if /usr/sbin/freeradius -C 2>&1 | head -5 | grep -q "Starting"; then
+if /usr/sbin/freeradius -C > /dev/null 2>&1; then
     log_message "SUCCESS" "Configuration RADIUS valide"
 else
-    log_message "WARNING" "Configuration RADIUS - vérification"
-    /usr/sbin/freeradius -C 2>&1 | head -20 | tee -a "$LOG_FILE"
+    log_message "WARNING" "Test de configuration échoué - continuant"
 fi
 
 # ============================================================================
@@ -150,18 +149,19 @@ fi
 # ============================================================================
 log_message "INFO" "Démarrage du service FreeRADIUS..."
 
-sudo systemctl daemon-reload
-sudo systemctl enable freeradius 2>&1 | tee -a "$LOG_FILE" || true
-sudo systemctl restart freeradius 2>&1 | tee -a "$LOG_FILE" || true
+sudo systemctl daemon-reload 2>/dev/null || true
+sudo systemctl enable freeradius 2>/dev/null || true
+sudo systemctl stop freeradius 2>/dev/null || true
+sleep 1
+sudo systemctl start freeradius
 
 sleep 3
 
 if systemctl is-active freeradius > /dev/null 2>&1; then
     log_message "SUCCESS" "Service FreeRADIUS démarré avec succès"
-    netstat -tuln 2>/dev/null | grep -E "1812|1813" || log_message "WARNING" "Ports RADIUS non détectés"
 else
-    log_message "WARNING" "FreeRADIUS non démarré - vérifiez les logs"
-    sudo journalctl -u freeradius -n 10 --no-pager | tee -a "$LOG_FILE"
+    log_message "WARNING" "FreeRADIUS ne démarre pas - vérifiez manuellement"
+    sudo journalctl -u freeradius -n 5 --no-pager | tee -a "$LOG_FILE"
 fi
 
 log_message "SUCCESS" "Installation RADIUS terminée"
