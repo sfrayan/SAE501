@@ -34,7 +34,7 @@ apt-get update -qq || true
 
 # IMPORTANT: Install FreeRADIUS package FIRST
 log_message "INFO" "Installation du package FreeRADIUS..."
-if ! apt-get install -y freeradius freeradius-mysql freeradius-utils mysql-client 2>&1 | tee -a "$LOG_FILE"; then
+if ! apt-get install -y freeradius freeradius-mysql freeradius-utils mariadb-client 2>&1 | tee -a "$LOG_FILE"; then
     error_exit "Échec installation FreeRADIUS - vérifiez les erreurs ci-dessus"
 fi
 log_message "INFO" "Package FreeRADIUS installé"
