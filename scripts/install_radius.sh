@@ -41,7 +41,8 @@ mkdir -p /etc/freeradius/3.0/sites-available
 mkdir -p /etc/freeradius/3.0/sites-enabled
 mkdir -p /var/lib/freeradius
 mkdir -p /var/log/freeradius
-mkdir -p /usr/var/run/radiusd
+mkdir -p /var/run/freeradius
+log_msg "Directories created"
 
 # 5. Copy radiusd.conf from repo (or create if not found)
 log_msg "Copying radiusd.conf from repo..."
@@ -52,7 +53,7 @@ else
     log_msg "radiusd.conf not found in repo, using inline template"
     cat > /etc/freeradius/3.0/radiusd.conf << 'RADIUSD_EOF'
 # FreeRADIUS Configuration File
-# SAE501 - Configuration pour environnement de production
+# SAE501 - Configuration minimaliste
 
 prefix = /usr
 exec_prefix = ${prefix}
@@ -60,6 +61,7 @@ installdir = ${exec_prefix}
 logdir = /var/log/freeradius
 raddbdir = /etc/freeradius/3.0
 localesdir = /usr/share/freeradius
+run_dir = /var/run/freeradius
 
 thread pool {
     num_networks = 1
@@ -161,8 +163,8 @@ fi
 
 # 7. Fix permissions
 log_msg "Fixing permissions..."
-chown -R freerad:freerad /etc/freeradius /var/lib/freeradius /var/log/freeradius /usr/var/run/radiusd 2>/dev/null || true
-chmod -R 750 /etc/freeradius /var/lib/freeradius /var/log/freeradius /usr/var/run/radiusd 2>/dev/null || true
+chown -R freerad:freerad /etc/freeradius /var/lib/freeradius /var/log/freeradius /var/run/freeradius 2>/dev/null || true
+chmod -R 750 /etc/freeradius /var/lib/freeradius /var/log/freeradius /var/run/freeradius 2>/dev/null || true
 log_msg "Permissions fixed"
 
 # 8. Test configuration
@@ -170,7 +172,7 @@ log_msg "Testing configuration..."
 if freeradius -Cx -lstdout -d /etc/freeradius/3.0 > /tmp/radius_config_test.log 2>&1; then
     log_msg "Configuration test PASSED"
 else
-    log_msg "Configuration test FAILED - showing first 30 lines:"
+    log_msg "Configuration test FAILED - showing errors:"
     head -30 /tmp/radius_config_test.log | tee -a "$LOG_FILE"
 fi
 
@@ -179,7 +181,7 @@ log_msg "Starting FreeRADIUS service..."
 systemctl daemon-reload
 systemctl enable freeradius
 if systemctl start freeradius 2>&1; then
-    log_msg "Service started"
+    log_msg "Service started successfully"
 else
     log_msg "Warning: service startup issue"
 fi
@@ -187,9 +189,9 @@ sleep 3
 
 # 10. Check if running
 if systemctl is-active --quiet freeradius; then
-    log_msg "SUCCESS: FreeRADIUS is running on port 1812/1813"
+    log_msg "✓ SUCCESS: FreeRADIUS is running on port 1812/1813"
 else
-    log_msg "WARNING: FreeRADIUS not running"
+    log_msg "✗ WARNING: FreeRADIUS not running"
     journalctl -u freeradius -n 20 --no-pager 2>&1 | tee -a "$LOG_FILE"
 fi
 
