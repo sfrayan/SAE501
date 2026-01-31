@@ -100,7 +100,7 @@ git clone https://github.com/sfrayan/SAE501.git
 cd SAE501
 
 # Rendre les scripts exécutables
-chmod +x scripts/*.sh
+chmod +x scripts/*.sh tests/*.sh
 ```
 
 ---
@@ -186,7 +186,49 @@ sudo bash scripts/install_hardening.sh
 
 ## **ÉTAPE 4: Vérifier l'installation**
 
-### 4.1 Vérifier les services
+### 4.1 Exécuter la suite complète de tests ✨ **NOUVEAU**
+
+```bash
+# Lancer tous les tests automatiques
+sudo bash tests/run_all_tests.sh
+```
+
+**Ce script teste automatiquement**:
+- ✅ Services (MySQL, FreeRADIUS, Apache, PHP-FPM)
+- ✅ Connectivité réseau (ports 22, 80, 443, 1812, 1813, 3306)
+- ✅ Base de données (tables, utilisateurs)
+- ✅ Configuration RADIUS (modules SQL, EAP, clients)
+- ✅ PHP-Admin (pages, permissions)
+- ✅ UFW Firewall (actif, règles)
+- ✅ SSH hardening (root disabled, chiffrement)
+- ✅ Fail2Ban (jails SSH/Apache)
+- ✅ Auditd (règles, surveillance)
+- ✅ Kernel sysctl (ASLR, TCP cookies)
+- ✅ Permissions fichiers sensibles
+- ✅ Wazuh (si installé)
+- ⚠️ Mots de passe par défaut (avertissement)
+
+**Résultat attendu**:
+```
+================================================================
+                    RÉSUMÉ DES TESTS
+================================================================
+
+Total des tests      : 65
+Tests réussis       : 60
+Tests échoués       : 0
+Avertissements      : 5
+
+Taux de réussite    : 92% 🎉
+
+================================================================
+  ✓ TOUS LES TESTS CRITIQUES RÉUSSIS!
+  🎆 Installation SAE501 opérationnelle
+================================================================
+```
+
+### 4.2 Diagnostics rapides (alternatif)
+
 ```bash
 # Affiche l'état de tous les services
 bash scripts/diagnostics.sh
@@ -203,7 +245,7 @@ Vous devriez voir:
 - ✓ Wazuh Manager ACTIF (si installé)
 - ✓ OpenSearch ACTIF (si installé)
 
-### 4.2 Tester l'authentification RADIUS
+### 4.3 Tester l'authentification RADIUS
 
 ```bash
 # Test avec l'utilisateur créé automatiquement
@@ -213,7 +255,7 @@ radtest testuser testpass localhost 0 testing123
 # Received Access-Accept
 ```
 
-### 4.3 Accéder à PHP-Admin 🆕
+### 4.4 Accéder à PHP-Admin 🆕
 
 ```
 URL: http://VOTRE_IP/admin
@@ -227,27 +269,6 @@ Mot de passe: Admin@Secure123!
 - ➕ **Ajouter**: Création rapide d'utilisateurs
 - 📄 **Logs**: Audit détaillé des actions
 - ⚙️ **Système**: Informations et diagnostics
-
-### 4.4 Vérifier le hardening 🆕
-
-```bash
-# Vérifier UFW firewall
-sudo ufw status verbose
-
-# Vérifier Fail2Ban
-sudo fail2ban-client status
-sudo fail2ban-client status sshd
-
-# Vérifier auditd
-sudo auditctl -l
-sudo ausearch -k exec | tail -10
-
-# Vérifier SSH hardening
-sudo sshd -T | grep -E "PermitRootLogin|PasswordAuthentication|Ciphers"
-
-# Vérifier MySQL hardening
-mysql -u root -p -e "SELECT User, Host FROM mysql.user;"
-```
 
 ---
 
@@ -524,6 +545,12 @@ SAE501/
 │   ├── generate_certificates.sh
 │   └── diagnostics.sh
 │
+├── tests/                      # Tests automatisés ✨ NOUVEAU
+│   ├── run_all_tests.sh        🧪 Suite complète de tests
+│   ├── test_isolement.sh       Tests réseau spécialisés
+│   ├── test_peap.sh            Tests PEAP-MSCHAPv2
+│   └── test_syslog_mr100.sh    Tests monitoring MR100
+│
 ├── radius/                     # Configuration RADIUS
 │   ├── clients.conf            ✅ SEUL FICHIER REQUIS
 │   └── sql/
@@ -548,6 +575,7 @@ Toutes les configurations sont générées automatiquement par les scripts.
 
 | Problème | Solution |
 |----------|----------|
+| Tests échoués | Relancer: `sudo bash tests/run_all_tests.sh` |
 | PHP-Admin inaccessible | `sudo systemctl restart apache2 php-fpm` |
 | Pages PHP manquantes | Relancer: `sudo bash scripts/install_php_admin.sh` |
 | Erreur connexion DB | Vérifier MySQL: `sudo systemctl status mysql` |
@@ -572,10 +600,16 @@ sudo bash scripts/install_hardening.sh    # ✨ 100% AUTONOME ⭐🆕
 
 # Voir l'état du système
 bash scripts/diagnostics.sh
+
+# Lancer tous les tests ✨ NOUVEAU
+sudo bash tests/run_all_tests.sh
 ```
 
 ### Tests
 ```bash
+# Suite complète de tests automatiques
+sudo bash tests/run_all_tests.sh
+
 # Tester l'authentification RADIUS
 radtest testuser testpass localhost 0 testing123
 
@@ -645,6 +679,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - [ ] Debian/Ubuntu 22.04+ installé
 - [ ] Repository SAE501 cloné
 - [ ] Scripts exécutés dans l'ordre
+- [ ] **Tous les tests passés** (`sudo bash tests/run_all_tests.sh`) ✨
 - [ ] FreeRADIUS démarré et test `testuser` fonctionne
 - [ ] **PHP-Admin accessible sur http://IP/admin** 🆕
 - [ ] **Hardening exécuté avec succès** ⭐🆕
@@ -682,6 +717,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - **PHP-Admin 100% autonome**: 🆕 Toutes pages générées durant installation
 - **Wazuh 100% autonome**: Manager + Dashboard en un seul script
 - **Hardening 100% autonome**: ⭐🆕 9 modules de sécurité en 1 commande
+- **Tests automatisés**: ✨ Suite complète pour validation
 - **Production-ready**: 98% après configuration
 
 ---
@@ -698,7 +734,10 @@ sudo bash scripts/install_hardening.sh     # ✨ 100% AUTONOME ⭐🆕
 # Optionnel - Monitoring avancé:
 sudo bash scripts/install_wazuh.sh        # ✨ 100% AUTONOME
 
-# Vérifier l'installation:
+# Vérifier l'installation avec tests automatisés:
+sudo bash tests/run_all_tests.sh          # ✨ NOUVEAU
+
+# Diagnostics alternatifs:
 bash scripts/diagnostics.sh
 
 # Vérifier le hardening:
@@ -728,4 +767,4 @@ radtest testuser testpass localhost 0 testing123
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*  
 *Dernière mise à jour: 31 janvier 2026*  
-*Version: 4.0 - Hardening 100% automatisé + Sécurité production-ready*
+*Version: 4.1 - Tests automatisés + Validation complète*
