@@ -297,17 +297,25 @@ log_message "SUCCESS" "Utilisateur PHP admin créé"
 # Wait for PHP user to be available
 sleep 1
 
-# Configure MySQL for network binding
-log_message "INFO" "Configuration MySQL pour écoute réseau..."
-mkdir -p /etc/mysql/mysql.conf.d
+# ============================================================================
+# CORRECTION CRITIQUE: FORCE MYSQL BINDING 0.0.0.0
+# ============================================================================
 
-cat > /etc/mysql/mysql.conf.d/sae501-network.cnf << 'EOF'
+log_message "INFO" "Configuration MySQL pour écoute réseau (FORCE)..."
+
+# Créer le répertoire
+mkdir -p /etc/mysql/mysql.conf.d
+mkdir -p /etc/mysql/mariadb.conf.d
+
+# Créer fichier de config avec priorité maximale (zzz pour chargement en dernier)
+cat > /etc/mysql/mysql.conf.d/zzz-sae501-network.cnf << 'EOF'
 # SAE501 - MySQL Network Configuration
-# Permet l'accès réseau à MySQL (essentiel pour FreeRADIUS)
+# FORCE binding réseau - Chargé en dernier pour override
 
 [mysqld]
-# Network binding - écoute sur toutes les interfaces
+# Network binding - FORCE écoute sur toutes les interfaces
 bind-address = 0.0.0.0
+skip-networking = 0
 
 # Security
 symbolic-links = 0
@@ -320,25 +328,39 @@ wait_timeout = 600
 max_allowed_packet = 64M
 EOF
 
-log_message "SUCCESS" "Configuration réseau MySQL créée"
+log_message "SUCCESS" "Configuration réseau MySQL créée (zzz-sae501-network.cnf)"
 
-# Comment bind-address in default config if present
-if [ -f "/etc/mysql/mysql.conf.d/mysqld.cnf" ]; then
-    log_message "INFO" "Désactivation bind-address par défaut..."
-    sed -i 's/^bind-address/#bind-address/' /etc/mysql/mysql.conf.d/mysqld.cnf 2>/dev/null || true
-fi
+# Commenter bind-address dans TOUS les fichiers de configuration
+log_message "INFO" "Désactivation bind-address dans les configs par défaut..."
+
+for conf in /etc/mysql/mysql.conf.d/mysqld.cnf \
+            /etc/mysql/mariadb.conf.d/50-server.cnf \
+            /etc/mysql/my.cnf \
+            /etc/mysql/mariadb.cnf; do
+    if [ -f "$conf" ]; then
+        if grep -q "^bind-address" "$conf" 2>/dev/null; then
+            log_message "INFO" "Commentaire bind-address dans $(basename $conf)"
+            sed -i 's/^bind-address/#bind-address (overridden by zzz-sae501-network.cnf)/' "$conf"
+        fi
+        if grep -q "^skip-networking" "$conf" 2>/dev/null; then
+            log_message "INFO" "Commentaire skip-networking dans $(basename $conf)"
+            sed -i 's/^skip-networking/#skip-networking (overridden by zzz-sae501-network.cnf)/' "$conf"
+        fi
+    fi
+done
 
 # Restart MySQL to apply network configuration
-log_message "INFO" "Redémarrage MySQL avec configuration réseau..."
+log_message "INFO" "Redémarrage MySQL avec configuration réseau forcée..."
 systemctl restart "$SERVICE_NAME"
 sleep 3
 
 # Verify MySQL is listening on network
 MYSQL_LISTEN=$(ss -tlnp | grep 3306 || echo "")
 if echo "$MYSQL_LISTEN" | grep -qE "(0.0.0.0:3306|\*:3306)"; then
-    log_message "SUCCESS" "MySQL écoute sur 0.0.0.0:3306 (toutes interfaces)"
+    log_message "SUCCESS" "✅ MySQL écoute sur 0.0.0.0:3306 (toutes interfaces)"
 else
-    log_message "WARNING" "MySQL binding: $MYSQL_LISTEN"
+    log_message "WARNING" "⚠️  MySQL binding: $MYSQL_LISTEN"
+    log_message "WARNING" "Vérification manuelle requise"
 fi
 
 # Store credentials securely
@@ -398,5 +420,5 @@ echo ""
 echo "Les identifiants sont également stockés dans:"
 echo "/opt/sae501/secrets/db.env (permissions: 640)"
 echo ""
-echo "MySQL écoute sur: 0.0.0.0:3306 (réseau)"
+echo "MySQL écoute sur: $(ss -tlnp | grep 3306 | awk '{print $4}')"
 echo "============================================"
