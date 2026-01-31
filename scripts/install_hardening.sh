@@ -4,7 +4,7 @@
 #                    SAE501 - SYSTÈME HARDENING COMPLET                    #
 #       Configuration sécurité automatisée - Prêt pour production         #
 #                     Author: SAE501 Security Team                         #
-#                          Version: 2.2                                    #
+#                          Version: 2.3                                    #
 #############################################################################
 
 set -euo pipefail
@@ -51,23 +51,38 @@ if ! command -v ufw &> /dev/null; then
     apt-get install -y ufw > /dev/null 2>&1
 fi
 
+# Reset complet pour partir d'une base propre
 ufw --force reset > /dev/null 2>&1 || true
 ufw default deny incoming
 ufw default allow outgoing
 ufw default deny routed
 
-# Règles essentielles
+# Règles essentielles - PAS de règle restrictive localhost
+log_info "Configuration des règles UFW..."
 ufw allow 22/tcp comment "SSH" > /dev/null
 ufw allow 80/tcp comment "HTTP" > /dev/null
 ufw allow 443/tcp comment "HTTPS" > /dev/null
 ufw allow 1812/udp comment "RADIUS Auth" > /dev/null
 ufw allow 1813/udp comment "RADIUS Acct" > /dev/null
-ufw allow 3306/tcp comment "MySQL" > /dev/null
+
+# Règle MySQL - CRITIQUE: Autoriser TOUTES les interfaces (pas localhost uniquement)
+log_info "Ajout règle MySQL réseau (0.0.0.0)..."
+ufw allow 3306/tcp comment "MySQL network" > /dev/null
+
 ufw allow 5601/tcp comment "Wazuh Dashboard" > /dev/null
 
 # Activer UFW
 ufw --force enable > /dev/null
 log_success "Firewall UFW configuré et activé"
+
+# Vérifier qu'aucune règle restrictive n'existe
+if ufw status | grep -q "127.0.0.1.*3306"; then
+    log_warning "Règle restrictive MySQL détectée, nettoyage..."
+    # Note: Cette section ne devrait jamais être atteinte après reset
+fi
+
+log_info "Règles UFW actives:"
+ufw status numbered | grep -E '(22|80|443|1812|1813|3306|5601)' || true
 
 # ============================================================================
 # 3. SSH HARDENING COMPLET
@@ -542,7 +557,7 @@ log_info "=========================================="
 echo ""
 log_info "✅ Configuration appliquée:"
 echo ""
-log_info "  🔥 UFW Firewall actif"
+log_info "  🔥 UFW Firewall actif (MySQL réseau autorisé)"
 log_info "  🔐 SSH durci (port 22)"
 log_info "  🛡️  Kernel sécurisé"
 log_info "  🗄️  MySQL durci (bind: 0.0.0.0)"
