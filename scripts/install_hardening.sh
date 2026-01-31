@@ -1,10 +1,10 @@
 #!/bin/bash
 
 #############################################################################
-#                    SAE501 - SYSTEM HARDENING SCRIPT                      #
-#            Comprehensive security configuration and hardening            #
+#                    SAE501 - SYSTÈME HARDENING COMPLET                    #
+#       Configuration sécurité automatisée - Prêt pour production         #
 #                     Author: SAE501 Security Team                         #
-#                          Version: 1.0                                    #
+#                          Version: 2.0                                    #
 #############################################################################
 
 set -euo pipefail
@@ -14,101 +14,88 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Logging functions
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_warning() { echo -e "${YELLOW}[⚠]${NC} $1"; }
+log_error() { echo -e "${RED}[✗]${NC} $1"; }
 
-log_success() {
-    echo -e "${GREEN}[✓]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[⚠]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[✗]${NC} $1"
-}
-
-# Check if running as root
+# Check root
 if [[ $EUID -ne 0 ]]; then
-    log_error "This script must be run as root"
+    log_error "Ce script doit être exécuté en tant que root"
     exit 1
 fi
 
-log_info "Starting system hardening..."
+log_info "========================================"
+log_info "   HARDENING SÉCURITÉ AUTOMATISÉ"
+log_info "========================================"
+echo ""
 
 # ============================================================================
-# 1. UFW FIREWALL CONFIGURATION
+# 1. MISE À JOUR SYSTÈME
 # ============================================================================
-log_info "Configuring UFW Firewall..."
+log_info "[1/9] Mise à jour du système..."
+apt-get update > /dev/null 2>&1
+apt-get upgrade -y > /dev/null 2>&1
+apt-get autoremove -y > /dev/null 2>&1
+log_success "Système mis à jour"
 
-# Install UFW if not present
+# ============================================================================
+# 2. UFW FIREWALL - CONFIGURATION SÉCURISÉE
+# ============================================================================
+log_info "[2/9] Configuration UFW Firewall..."
+
 if ! command -v ufw &> /dev/null; then
-    apt-get update && apt-get install -y ufw > /dev/null
-    log_success "UFW installed"
+    apt-get install -y ufw > /dev/null 2>&1
 fi
 
-# Reset to defaults (this will ask for confirmation)
 ufw --force reset > /dev/null 2>&1 || true
-
-# Default policies
 ufw default deny incoming
 ufw default allow outgoing
 ufw default deny routed
 
-# Allow SSH FIRST (port 22) - before enabling UFW
+# Règles essentielles
 ufw allow 22/tcp comment "SSH" > /dev/null
-
-# Allow HTTP/HTTPS
 ufw allow 80/tcp comment "HTTP" > /dev/null
 ufw allow 443/tcp comment "HTTPS" > /dev/null
-
-# Allow RADIUS (ports 1812-1813)
 ufw allow 1812/udp comment "RADIUS Auth" > /dev/null
 ufw allow 1813/udp comment "RADIUS Acct" > /dev/null
+ufw allow from 127.0.0.1 to 127.0.0.1 port 3306 comment "MySQL local" > /dev/null
+ufw allow 5601/tcp comment "Wazuh Dashboard" > /dev/null
 
-# Allow MySQL (port 3306) - only from localhost by default
-ufw allow from 127.0.0.1 to 127.0.0.1 port 3306 comment "MySQL localhost" > /dev/null
-
-# Enable UFW
+# Activer UFW
 ufw --force enable > /dev/null
-log_success "UFW Firewall configured and enabled"
+log_success "Firewall UFW configuré et activé"
 
 # ============================================================================
-# 2. SSH HARDENING
+# 3. SSH HARDENING COMPLET
 # ============================================================================
-log_info "Hardening SSH configuration..."
+log_info "[3/9] Durcissement SSH..."
 
-# Backup original SSH config
-if [ ! -f /etc/ssh/sshd_config.bak ]; then
-    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
-    log_success "SSH config backed up"
-fi
+# Backup
+[ ! -f /etc/ssh/sshd_config.bak ] && cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
-# Configure SSH security settings (but keep working authentication)
-cat > /etc/ssh/sshd_config << 'EOF'
-# This is the ssh server system-wide configuration file.
+cat > /etc/ssh/sshd_config << 'EOFSSH'
+# SAE501 - SSH Hardened Configuration
 Port 22
 AddressFamily any
 ListenAddress 0.0.0.0
 ListenAddress ::
 
-# HostKeys
+# Host Keys
 HostKey /etc/ssh/ssh_host_rsa_key
 HostKey /etc/ssh/ssh_host_ed25519_key
 
-# Security Settings
+# Security
 Protocol 2
 PermitRootLogin no
 StrictModes yes
 MaxAuthTries 3
 MaxSessions 10
 
-# Authentication - allow password for now, but secure it
+# Authentication
 PubkeyAuthentication yes
 PasswordAuthentication yes
 PermitEmptyPasswords no
@@ -127,7 +114,7 @@ AllowTcpForwarding no
 ClientAliveInterval 300
 ClientAliveCountMax 2
 
-# Ciphers and Algorithms (Modern + Secure)
+# Cryptographie moderne
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,hmac-sha2-512,hmac-sha2-256
 KexAlgorithms curve25519-sha256,curve25519-sha256@libssh.org,diffie-hellman-group-exchange-sha256
@@ -140,163 +127,103 @@ LogLevel VERBOSE
 # Banner
 Banner /etc/issue.net
 
-# Subsystem
+# SFTP
 Subsystem sftp /usr/lib/openssh/sftp-server -f AUTHPRIV -l INFO
-EOF
+EOFSSH
 
-# Create SSH banner
-cat > /etc/issue.net << 'EOF'
+# Banner SSH
+cat > /etc/issue.net << 'EOFBANNER'
 ###############################################################
-#                   AUTHORIZED ACCESS ONLY                   #
+#                   ACCÈS AUTORISÉ UNIQUEMENT                #
 #                                                             #
-# Unauthorized access to this system is forbidden and will   #
-# be prosecuted by law. By accessing this system, you agree  #
-# that your actions may be monitored and recorded.           #
+# L'accès non autorisé à ce système est interdit et sera     #
+# poursuivi conformément à la loi. En accédant à ce système, #
+# vous acceptez que vos actions puissent être surveillées.   #
 ###############################################################
-EOF
+EOFBANNER
 
-# Restart SSH service (use ssh, not sshd on Debian)
-sudo systemctl restart ssh > /dev/null 2>&1 || sudo systemctl restart sshd > /dev/null 2>&1 || true
-log_success "SSH hardened and restarted"
+systemctl restart ssh > /dev/null 2>&1 || systemctl restart sshd > /dev/null 2>&1
+log_success "SSH durci et redémarré"
 
 # ============================================================================
-# 3. KERNEL SECURITY PARAMETERS
+# 4. PARAMÈTRES KERNEL SÉCURISÉS
 # ============================================================================
-log_info "Hardening kernel parameters..."
+log_info "[4/9] Application des paramètres kernel..."
 
-# Backup sysctl config
-if [ ! -f /etc/sysctl.d/99-sae501-hardening.conf.bak ]; then
-    if [ -f /etc/sysctl.d/99-hardening.conf ]; then
-        cp /etc/sysctl.d/99-hardening.conf /etc/sysctl.d/99-sae501-hardening.conf.bak 2>/dev/null || true
-    fi
-fi
+cat > /etc/sysctl.d/99-sae501-hardening.conf << 'EOFKERNEL'
+# SAE501 - Kernel Hardening
 
-# Apply hardening settings
-cat >> /etc/sysctl.d/99-sae501-hardening.conf << 'EOF'
-
-# SAE501 Security Hardening
-# ============================
-
-# Kernel protection
+# Protection kernel
 kernel.kptr_restrict = 2
 kernel.dmesg_restrict = 1
 kernel.printk = 3 3 3 3
-kernel.unprivileged_ns_clone = 0
+kernel.unprivileged_bpf_disabled = 1
+kernel.unprivileged_userns_clone = 0
+kernel.yama.ptrace_scope = 2
 
-# Core dumps disabled
+# Core dumps désactivés
 kernel.core_uses_pid = 1
 fs.suid_dumpable = 0
 
-# ASLR - Address Space Layout Randomization
+# ASLR maximum
 kernel.randomize_va_space = 2
 
-# PID hiding
+# Protection PID
 kernel.pid_max = 2097152
 kernel.perf_event_paranoid = 3
-
-# Restrict access to kernel logs
 kernel.sysrq = 0
 
-# Panic configuration
+# Panic config
 kernel.panic = 60
 kernel.panic_on_oops = 0
 
-# Network security
+# Sécurité réseau IPv4
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
-net.ipv4.icmp_echo_ignore_all = 0
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.conf.all.log_martians = 1
+net.ipv4.conf.default.log_martians = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
 net.ipv4.tcp_syncookies = 1
-net.ipv4.conf.all.log_martians = 1
-net.ipv4.conf.default.log_martians = 1
-net.ipv6.conf.all.disable_ipv6 = 0
-net.ipv6.conf.all.forwarding = 0
-
-# TCP hardening
 net.ipv4.tcp_timestamps = 1
 net.ipv4.tcp_max_syn_backlog = 4096
-net.ipv4.conf.all.accept_source_route = 0
-net.ipv4.conf.default.accept_source_route = 0
-net.ipv6.conf.all.accept_source_route = 0
-net.ipv4.conf.all.send_redirects = 0
-net.ipv4.conf.default.send_redirects = 0
-net.ipv4.conf.all.accept_redirects = 0
-net.ipv4.conf.default.accept_redirects = 0
-net.ipv6.conf.all.accept_redirects = 0
+net.ipv4.tcp_fin_timeout = 15
 
-# File system
+# Sécurité IPv6
+net.ipv6.conf.all.disable_ipv6 = 0
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+net.ipv6.conf.all.forwarding = 0
+
+# Système de fichiers
 fs.protected_symlinks = 1
 fs.protected_hardlinks = 1
 fs.protected_regular = 2
 fs.protected_fifos = 2
-EOF
+EOFKERNEL
 
 sysctl -p /etc/sysctl.d/99-sae501-hardening.conf > /dev/null 2>&1
-log_success "Kernel security parameters applied"
+log_success "Paramètres kernel appliqués"
 
 # ============================================================================
-# 4. MYSQL SECURITY
+# 5. FAIL2BAN - PROTECTION BRUTEFORCE
 # ============================================================================
-log_info "Hardening MySQL security..."
-
-if command -v mysql &> /dev/null; then
-    # Remove anonymous users
-    mysql -u root << 'EOF' 2>/dev/null || true
-DELETE FROM mysql.user WHERE User='';
-DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
-DROP DATABASE IF EXISTS test;
-DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
-FLUSH PRIVILEGES;
-EOF
-    log_success "MySQL anonymous users removed and test database dropped"
-
-    # Enable MySQL slow query log and audit
-    if [ ! -f /etc/mysql/mysql.conf.d/sae501-hardening.cnf ]; then
-        cat > /etc/mysql/mysql.conf.d/sae501-hardening.cnf << 'EOF'
-[mysqld]
-# Security settings
-symbolic-links = 0
-local-infile = 0
-skip-external-locking = 1
-skip-name-resolve = 1
-
-# Audit and logging
-log_error = /var/log/mysql/error.log
-log_error_verbosity = 3
-general_log = 0
-slow_query_log = 1
-slow_query_log_file = /var/log/mysql/slow-query.log
-long_query_time = 2
-
-# Binary logging for backups
-log_bin = /var/log/mysql/mysql-bin.log
-expire_logs_days = 14
-
-# InnoDB hardening
-innodb_flush_method = O_DIRECT
-innodb_file_per_table = 1
-innodb_autoinc_lock_mode = 2
-EOF
-        systemctl restart mysql > /dev/null 2>&1 || true
-        log_success "MySQL hardening configuration applied"
-    fi
-else
-    log_warning "MySQL not found, skipping MySQL hardening"
-fi
-
-# ============================================================================
-# 5. FAIL2BAN INSTALLATION AND CONFIGURATION
-# ============================================================================
-log_info "Setting up Fail2Ban..."
+log_info "[5/9] Configuration Fail2Ban..."
 
 if ! command -v fail2ban-client &> /dev/null; then
-    apt-get update && apt-get install -y fail2ban > /dev/null
-    log_success "Fail2Ban installed"
+    apt-get install -y fail2ban > /dev/null 2>&1
 fi
 
-# Create local jail configuration
-cat > /etc/fail2ban/jail.local << 'EOF'
+cat > /etc/fail2ban/jail.local << 'EOFFAIL2BAN'
 [DEFAULT]
 bantime = 3600
 findtime = 600
@@ -304,13 +231,14 @@ maxretry = 5
 destemail = root@localhost
 sender = root@localhost
 action = %(action_mwl)s
+ignoreip = 127.0.0.1/8 ::1
 
 [sshd]
 enabled = true
 port = ssh
 logpath = /var/log/auth.log
 maxretry = 3
-bantime = 1800
+bantime = 3600
 
 [sshd-ddos]
 enabled = true
@@ -318,7 +246,7 @@ port = ssh
 logpath = /var/log/auth.log
 maxretry = 10
 findtime = 600
-bantime = 1800
+bantime = 3600
 
 [recidive]
 enabled = true
@@ -327,109 +255,306 @@ action = %(action_mwl)s
 bantime = 604800
 findtime = 86400
 maxretry = 5
-EOF
 
-systemctl enable fail2ban > /dev/null
-systemctl restart fail2ban > /dev/null
-log_success "Fail2Ban configured and enabled"
+[apache-auth]
+enabled = true
+port = http,https
+logpath = /var/log/apache2/error.log
+maxretry = 5
+
+[apache-badbots]
+enabled = true
+port = http,https
+logpath = /var/log/apache2/access.log
+maxretry = 3
+bantime = 7200
+
+[apache-noscript]
+enabled = true
+port = http,https
+logpath = /var/log/apache2/error.log
+maxretry = 5
+
+[apache-overflows]
+enabled = true
+port = http,https
+logpath = /var/log/apache2/error.log
+maxretry = 2
+bantime = 7200
+EOFFAIL2BAN
+
+systemctl enable fail2ban > /dev/null 2>&1
+systemctl restart fail2ban > /dev/null 2>&1
+log_success "Fail2Ban configuré"
 
 # ============================================================================
-# 6. AUDIT DAEMON CONFIGURATION
+# 6. AUDITD - LOGGING AVANCÉ
 # ============================================================================
-log_info "Configuring audit logging..."
+log_info "[6/9] Configuration auditd..."
 
 if ! command -v auditctl &> /dev/null; then
-    apt-get install -y auditd > /dev/null
-    log_success "auditd installed"
+    apt-get install -y auditd > /dev/null 2>&1
 fi
 
-# Create audit rules
-cat > /etc/audit/rules.d/sae501.rules << 'EOF'
-# Remove any existing rules
+cat > /etc/audit/rules.d/sae501.rules << 'EOFAUDIT'
+# SAE501 - Audit Rules
 -D
-
-# Buffer Size
 -b 8192
-
-# Failure handling
 -f 1
 
-# Audit system calls
+# Surveillance des commandes système
 -a always,exit -F arch=b64 -S execve -k exec
 -a always,exit -F arch=b32 -S execve -k exec
 
-# Audit file modifications
--w /etc/sudoers -p wa -k sudoers
--w /etc/sudoers.d/ -p wa -k sudoers
--w /var/log/auth.log -p wa -k auth
--w /etc/ssh/sshd_config -p wa -k sshd_config
--w /etc/mysql/ -p wa -k mysql_config
--w /etc/freeradius/ -p wa -k radius_config
+# Surveillance des fichiers critiques
+-w /etc/sudoers -p wa -k sudoers_changes
+-w /etc/sudoers.d/ -p wa -k sudoers_changes
+-w /var/log/auth.log -p wa -k auth_log_changes
+-w /etc/ssh/sshd_config -p wa -k sshd_config_changes
+-w /etc/mysql/ -p wa -k mysql_config_changes
+-w /etc/freeradius/ -p wa -k radius_config_changes
+-w /etc/apache2/ -p wa -k apache_config_changes
 
-# Audit user/group modifications
+# Surveillance utilisateurs/groupes
 -w /etc/group -p wa -k group_modifications
 -w /etc/passwd -p wa -k passwd_modifications
 -w /etc/gshadow -p wa -k gshadow_modifications
 -w /etc/shadow -p wa -k shadow_modifications
+-w /etc/security/opasswd -p wa -k password_history
 
-# Make configuration immutable
+# Surveillance modifications réseau
+-a always,exit -F arch=b64 -S sethostname -S setdomainname -k network_modifications
+-w /etc/hosts -p wa -k network_modifications
+-w /etc/network/ -p wa -k network_modifications
+
+# Surveillance des montages
+-a always,exit -F arch=b64 -S mount -S umount2 -k mounts
+
+# Surveillance des modifications de fichiers importants
+-w /bin/ -p wa -k binaries
+-w /sbin/ -p wa -k binaries
+-w /usr/bin/ -p wa -k binaries
+-w /usr/sbin/ -p wa -k binaries
+
+# Immutabilité
 -e 2
-EOF
+EOFAUDIT
 
-systemctl enable auditd > /dev/null
-systemctl restart auditd > /dev/null
+systemctl enable auditd > /dev/null 2>&1
+systemctl restart auditd > /dev/null 2>&1
 augenrules --load > /dev/null 2>&1 || true
-log_success "Audit rules configured and enabled"
+log_success "Auditd configuré"
 
 # ============================================================================
-# 7. FILE PERMISSIONS HARDENING
+# 7. MYSQL HARDENING
 # ============================================================================
-log_info "Hardening file permissions..."
+log_info "[7/9] Durcissement MySQL..."
 
-# Sensitive files permissions
+if command -v mysql &> /dev/null; then
+    # Nettoyage sécurité
+    mysql -u root << 'EOFMYSQL' 2>/dev/null || true
+DELETE FROM mysql.user WHERE User='';
+DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1');
+DROP DATABASE IF EXISTS test;
+DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
+FLUSH PRIVILEGES;
+EOFMYSQL
+
+    # Configuration hardening
+    cat > /etc/mysql/mysql.conf.d/sae501-hardening.cnf << 'EOFMYSQLCONF'
+[mysqld]
+# Sécurité
+symbolic-links = 0
+local-infile = 0
+skip-external-locking = 1
+skip-name-resolve = 1
+max_connect_errors = 10
+max_connections = 150
+
+# Logging
+log_error = /var/log/mysql/error.log
+log_error_verbosity = 3
+general_log = 0
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow-query.log
+long_query_time = 2
+
+# Binary logging
+log_bin = /var/log/mysql/mysql-bin.log
+expire_logs_days = 14
+sync_binlog = 1
+
+# InnoDB
+innodb_flush_method = O_DIRECT
+innodb_file_per_table = 1
+innodb_buffer_pool_size = 256M
+innodb_log_file_size = 64M
+innodb_flush_log_at_trx_commit = 1
+
+# Performance Schema (surveillance)
+performance_schema = ON
+EOFMYSQLCONF
+
+    systemctl restart mysql > /dev/null 2>&1
+    log_success "MySQL durci"
+else
+    log_warning "MySQL non trouvé, hardening MySQL ignoré"
+fi
+
+# ============================================================================
+# 8. APACHE HARDENING
+# ============================================================================
+log_info "[8/9] Durcissement Apache..."
+
+if command -v apache2 &> /dev/null; then
+    # Désactiver modules dangereux
+    a2dismod status autoindex -f > /dev/null 2>&1 || true
+    
+    # Activer modules sécurité
+    a2enmod headers ssl rewrite > /dev/null 2>&1
+    
+    # Configuration sécurité
+    cat > /etc/apache2/conf-available/security-hardening.conf << 'EOFAPACHE'
+# SAE501 - Apache Security Hardening
+
+# Masquer les informations serveur
+ServerTokens Prod
+ServerSignature Off
+TraceEnable Off
+
+# Headers de sécurité
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    Header always unset X-Powered-By
+    Header always unset Server
+</IfModule>
+
+# Désactiver listage répertoires
+<Directory />
+    Options -Indexes -FollowSymLinks
+    AllowOverride None
+    Require all denied
+</Directory>
+
+<Directory /var/www/>
+    Options -Indexes -FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+# Limiter taille uploads
+LimitRequestBody 10485760
+
+# Timeouts
+Timeout 60
+KeepAlive On
+MaxKeepAliveRequests 100
+KeepAliveTimeout 5
+EOFAPACHE
+
+    a2enconf security-hardening > /dev/null 2>&1
+    systemctl restart apache2 > /dev/null 2>&1
+    log_success "Apache durci"
+else
+    log_warning "Apache non trouvé"
+fi
+
+# ============================================================================
+# 9. PERMISSIONS FICHIERS
+# ============================================================================
+log_info "[9/9] Durcissement des permissions..."
+
+# Fichiers système
 chmod 644 /etc/passwd
 chmod 640 /etc/shadow
 chmod 644 /etc/group
 chmod 640 /etc/gshadow
 chmod 644 /etc/ssh/sshd_config
-chmod 600 /etc/ssh/ssh_host_*_key
-chmod 644 /etc/ssh/ssh_host_*_key.pub
+chmod 600 /etc/ssh/ssh_host_*_key 2>/dev/null || true
+chmod 644 /etc/ssh/ssh_host_*_key.pub 2>/dev/null || true
 
-# Ensure cron and at are restricted
+# Cron et at
 chmod 700 /var/spool/cron/crontabs 2>/dev/null || true
 chmod 700 /var/spool/at 2>/dev/null || true
 
-log_success "File permissions hardened"
+# Logs sensibles
+chmod 640 /var/log/auth.log* 2>/dev/null || true
+chmod 640 /var/log/syslog* 2>/dev/null || true
+
+log_success "Permissions durcies"
 
 # ============================================================================
-# 8. SYSTEM UPDATES AND CLEANUP
+# 10. CONFIGURATION UTILISATEUR SÉCURISÉE
 # ============================================================================
-log_info "Updating system packages..."
+log_info "Configuration des politiques utilisateurs..."
 
-apt-get update > /dev/null
-apt-get upgrade -y > /dev/null
-log_success "System packages updated"
+# Politique mot de passe PAM
+cat > /etc/security/pwquality.conf << 'EOFPWQUALITY'
+# SAE501 - Password Quality Requirements
+minlen = 12
+minclass = 3
+maxrepeat = 3
+maxsequence = 3
+gecosmatch = 0
+dictonlycheck = 1
+usercheck = 1
+enforcing = 1
+retry = 3
+EOFPWQUALITY
+
+# Limites utilisateurs
+cat >> /etc/security/limits.conf << 'EOFLIMITS'
+
+# SAE501 - Security Limits
+* soft core 0
+* hard core 0
+* soft nproc 1024
+* hard nproc 2048
+* soft nofile 8192
+* hard nofile 16384
+EOFLIMITS
+
+log_success "Politiques utilisateurs configurées"
 
 # ============================================================================
-# FINAL SUMMARY
+# RÉSUMÉ FINAL
 # ============================================================================
+echo ""
 log_info "=========================================="
-log_success "System hardening completed successfully!"
+log_success "   HARDENING TERMINÉ AVEC SUCCÈS!"
 log_info "=========================================="
-log_info ""
-log_info "Hardening applied:"
-log_info "  ✓ UFW Firewall configured"
-log_info "  ✓ SSH security hardened"
-log_info "  ✓ Kernel security parameters applied"
-log_info "  ✓ MySQL security enhanced"
-log_info "  ✓ Fail2Ban configured"
-log_info "  ✓ Audit logging enabled"
-log_info "  ✓ File permissions hardened"
-log_info ""
-log_info "Firewall status:"
-log_info "  ufw status verbose"
-log_info ""
-log_info "SSH is active on port 22 (password auth temporarily enabled)"
-log_info ""
+echo ""
+log_info "✅ Configuration appliquée:"
+echo ""
+log_info "  🔥 UFW Firewall actif"
+log_info "  🔐 SSH durci (port 22)"
+log_info "  🛡️  Kernel sécurisé"
+log_info "  🗄️  MySQL durci"
+log_info "  🌐 Apache sécurisé"
+log_info "  🚫 Fail2Ban actif"
+log_info "  📝 Auditd configuré"
+log_info "  📂 Permissions durcies"
+log_info "  👤 Politiques utilisateurs"
+echo ""
+log_info "📋 Vérifications:"
+echo ""
+echo "  # État firewall:"
+echo "  ufw status verbose"
+echo ""
+echo "  # Bans actifs:"
+echo "  fail2ban-client status"
+echo ""
+echo "  # Logs audit:"
+echo "  ausearch -k exec | tail -20"
+echo ""
+log_warning "⚠️  IMPORTANT - CHANGEZ LES MOTS DE PASSE PAR DÉFAUT!"
+log_warning "⚠️  Consultez le README pour les étapes post-installation"
+echo ""
+log_success "Système prêt pour la production! 🚀"
+echo ""
 
 exit 0
