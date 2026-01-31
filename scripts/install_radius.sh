@@ -58,7 +58,11 @@ check_mysql_credentials() {
     # Charger les credentials MySQL
     source "$DB_ENV_FILE"
     
-    if [[ -z "${MYSQL_RADIUS_USER:-}" || -z "${MYSQL_RADIUS_PASS:-}" ]]; then
+    # Support pour les anciens et nouveaux noms de variables
+    if [[ -n "${DB_USER_RADIUS:-}" && -n "${DB_PASSWORD_RADIUS:-}" ]]; then
+        MYSQL_RADIUS_USER="$DB_USER_RADIUS"
+        MYSQL_RADIUS_PASS="$DB_PASSWORD_RADIUS"
+    elif [[ -z "${MYSQL_RADIUS_USER:-}" || -z "${MYSQL_RADIUS_PASS:-}" ]]; then
         log_msg "❌ ERROR: MYSQL_RADIUS_USER or MYSQL_RADIUS_PASS not set in $DB_ENV_FILE"
         exit 1
     fi
@@ -151,6 +155,12 @@ configure_sql_module() {
     log_msg "🗄️  Configuring SQL module..."
     
     source "$DB_ENV_FILE"
+    
+    # Support pour les anciens et nouveaux noms de variables
+    if [[ -n "${DB_USER_RADIUS:-}" && -n "${DB_PASSWORD_RADIUS:-}" ]]; then
+        MYSQL_RADIUS_USER="$DB_USER_RADIUS"
+        MYSQL_RADIUS_PASS="$DB_PASSWORD_RADIUS"
+    fi
     
     cat > /etc/freeradius/3.0/mods-enabled/sql << 'SQL_CONF_EOF'
 sql {
@@ -351,13 +361,28 @@ INNER_TUNNEL_EOF
 deploy_clients_conf() {
     log_msg "📋 Deploying clients.conf from repository..."
     
-    if [[ -f /opt/SAE501/radius/clients.conf ]]; then
-        cp /opt/SAE501/radius/clients.conf /etc/freeradius/3.0/clients.conf
-        chmod 640 /etc/freeradius/3.0/clients.conf
-        chown freerad:freerad /etc/freeradius/3.0/clients.conf
-        log_msg "✓ clients.conf deployed from repo"
-    else
-        log_msg "⚠️  WARNING: /opt/SAE501/radius/clients.conf not found"
+    # Chercher le repo dans plusieurs emplacements possibles
+    REPO_PATHS=(
+        "$PWD/radius/clients.conf"
+        "/opt/SAE501/radius/clients.conf"
+        "$HOME/SAE501/radius/clients.conf"
+        "$(dirname "$0")/../radius/clients.conf"
+    )
+    
+    CLIENTS_FOUND=false
+    for path in "${REPO_PATHS[@]}"; do
+        if [[ -f "$path" ]]; then
+            cp "$path" /etc/freeradius/3.0/clients.conf
+            chmod 640 /etc/freeradius/3.0/clients.conf
+            chown freerad:freerad /etc/freeradius/3.0/clients.conf
+            log_msg "✓ clients.conf deployed from $path"
+            CLIENTS_FOUND=true
+            break
+        fi
+    done
+    
+    if [[ "$CLIENTS_FOUND" == "false" ]]; then
+        log_msg "⚠️  WARNING: clients.conf not found in repository"
         log_msg "Creating minimal localhost client..."
         
         cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
@@ -536,6 +561,13 @@ test_authentication() {
     
     # Créer un utilisateur test si n'existe pas déjà
     source "$DB_ENV_FILE"
+    
+    # Support pour les anciens et nouveaux noms de variables
+    if [[ -n "${DB_USER_RADIUS:-}" && -n "${DB_PASSWORD_RADIUS:-}" ]]; then
+        MYSQL_RADIUS_USER="$DB_USER_RADIUS"
+        MYSQL_RADIUS_PASS="$DB_PASSWORD_RADIUS"
+    fi
+    
     mysql -u "$MYSQL_RADIUS_USER" -p"$MYSQL_RADIUS_PASS" radius << 'TEST_USER_EOF' 2>/dev/null || true
 INSERT IGNORE INTO radcheck (username, attribute, op, value) 
 VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass');
