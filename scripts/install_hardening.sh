@@ -4,7 +4,7 @@
 #                    SAE501 - SYSTÈME HARDENING COMPLET                    #
 #       Configuration sécurité automatisée - Prêt pour production         #
 #                     Author: SAE501 Security Team                         #
-#                          Version: 2.1                                    #
+#                          Version: 2.2                                    #
 #############################################################################
 
 set -euo pipefail
@@ -62,7 +62,7 @@ ufw allow 80/tcp comment "HTTP" > /dev/null
 ufw allow 443/tcp comment "HTTPS" > /dev/null
 ufw allow 1812/udp comment "RADIUS Auth" > /dev/null
 ufw allow 1813/udp comment "RADIUS Acct" > /dev/null
-ufw allow from 127.0.0.1 to 127.0.0.1 port 3306 comment "MySQL local" > /dev/null
+ufw allow 3306/tcp comment "MySQL" > /dev/null
 ufw allow 5601/tcp comment "Wazuh Dashboard" > /dev/null
 
 # Activer UFW
@@ -372,6 +372,9 @@ EOFMYSQL
     # Configuration hardening
     cat > /etc/mysql/mysql.conf.d/sae501-hardening.cnf << 'EOFMYSQLCONF'
 [mysqld]
+# Network binding
+bind-address = 0.0.0.0
+
 # Sécurité
 symbolic-links = 0
 local-infile = 0
@@ -542,7 +545,7 @@ echo ""
 log_info "  🔥 UFW Firewall actif"
 log_info "  🔐 SSH durci (port 22)"
 log_info "  🛡️  Kernel sécurisé"
-log_info "  🗄️  MySQL durci"
+log_info "  🗄️  MySQL durci (bind: 0.0.0.0)"
 log_info "  🌐 Apache sécurisé"
 log_info "  🚫 Fail2Ban actif"
 log_info "  📝 Auditd configuré"
