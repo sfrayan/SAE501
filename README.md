@@ -18,6 +18,7 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 - Serveur d'authentification RADIUS
 - Protocole: PEAP-MSCHAPv2 (sans certificat client)
 - Base de données utilisateurs: MySQL
+- ✨ **Configuration 100% automatique** - aucun fichier externe requis
 
 ### **PHP-Admin** (Port 80/443)
 - Interface web de gestion
@@ -97,7 +98,14 @@ chmod +x scripts/*.sh
 # 1. Installer MySQL et créer la base de données
 sudo bash scripts/install_mysql.sh
 
-# 2. Installer FreeRADIUS
+# 2. Installer FreeRADIUS (100% AUTONOME)
+# ✨ Génère AUTOMATIQUEMENT:
+#    - Certificats SSL auto-signés
+#    - Configuration SQL (rlm_sql_mysql)
+#    - Configuration EAP (PEAP-MSCHAPv2)
+#    - Sites default + inner-tunnel
+#    - Module mschap
+#    - Test d'authentification
 sudo bash scripts/install_radius.sh
 
 # 3. Installer PHP-Admin (interface web)
@@ -111,6 +119,13 @@ sudo bash scripts/install_hardening.sh
 ```
 
 **Durée estimée**: 15-20 minutes au total
+
+**✨ Nouveautés du script RADIUS**:
+- ✅ **Zéro dépendance** aux fichiers de configuration externes (sauf clients.conf)
+- ✅ Génération automatique des certificats SSL/TLS
+- ✅ Configuration complète MySQL + EAP + Sites
+- ✅ Test automatique de l'authentification
+- ✅ Logs détaillés dans `/var/log/sae501_radius_install.log`
 
 **Avantages de l'installation modulaire**:
 - ✅ Contrôle total sur chaque composant
@@ -143,19 +158,31 @@ bash scripts/diagnostics.sh
 
 Notez les identifiants affichés!
 
+### 4.3 Tester l'authentification RADIUS
+
+```bash
+# Test avec l'utilisateur créé automatiquement
+radtest testuser testpass localhost 0 testing123
+
+# Vous devriez voir:
+# Received Access-Accept
+```
+
 ---
 
 ## **ÉTAPE 5: Configuration Sécurité Avancée (RECOMMANDÉ) ⭐**
 
-### 5.1 Générer les certificats SSL/TLS
+### 5.1 Générer des certificats SSL valides (PRODUCTION)
 
 ```bash
-# Générer certificats self-signed (développement)
-sudo bash scripts/generate_certificates.sh
-
-# OU pour production (Let's Encrypt)
+# Pour la production (Let's Encrypt)
 sudo apt-get install -y certbot python3-certbot-apache
 sudo certbot certonly --apache -d VOTRE_DOMAINE.com
+
+# Remplacer les certificats auto-signés
+sudo ln -sf /etc/letsencrypt/live/VOTRE_DOMAINE.com/fullchain.pem /etc/freeradius/3.0/certs/server.pem
+sudo ln -sf /etc/letsencrypt/live/VOTRE_DOMAINE.com/privkey.pem /etc/freeradius/3.0/certs/server.key
+sudo systemctl restart freeradius
 ```
 
 ### 5.2 Vérifier le hardening appliqué
@@ -252,7 +279,7 @@ Password: admin (par défaut TP-Link)
 4. **Authentication Type**: PEAP ou EAP-TLS
 5. **RADIUS Server IP**: Adresse IP du serveur SAE501
 6. **RADIUS Server Port**: 1812
-7. **Shared Secret**: Celui configuré en PHP-Admin Paramétrages
+7. **Shared Secret**: Celui configuré dans `radius/clients.conf` (par défaut: `testing123`)
 8. **Cliquer Save**
 
 ### 7.3 Tester la connexion
@@ -261,9 +288,9 @@ Sur un ordinateur:
 1. Chercher le réseau Wi-Fi
 2. Connecter à l'SSID "Entreprise"
 3. Type d'authentification: WPA-Enterprise
-4. Entrer un identifiant RADIUS créé en PHP-Admin
-5. Entrer le mot de passe
-6. Vérifier dans les logs: `bash scripts/diagnostics.sh` → Logs d'authentification
+4. Entrer un identifiant RADIUS créé en PHP-Admin (ou `testuser`)
+5. Entrer le mot de passe (ou `testpass`)
+6. Vérifier dans les logs: `sudo tail -f /var/log/freeradius/radius.log`
 
 ---
 
@@ -277,7 +304,7 @@ Sur un ordinateur:
 3. Entrez:
    - Identifiant: `jean.dupont`
    - Mot de passe: `MonPasse@123`
-4. Cliquez "Enregistrer"
+4. Cliquez "Énregistrer"
 
 **Via CLI (optionnel)**:
 ```bash
@@ -285,7 +312,7 @@ mysql -u radiusapp -p radius
 # Mot de passe: RadiusApp@Secure123!
 
 INSERT INTO radcheck (username, attribute, op, value) 
-VALUES ('jean.dupont', 'User-Password', ':=', MD5('MonPasse@123'));
+VALUES ('jean.dupont', 'Cleartext-Password', ':=', 'MonPasse@123');
 
 EXIT;
 ```
@@ -334,11 +361,17 @@ sudo tail -f /var/log/freeradius/radius.log
 # Diagnostics détaillés
 bash scripts/diagnostics.sh
 
-# Voir les logs
+# Voir les logs FreeRADIUS
 sudo tail -f /var/log/freeradius/radius.log
 
+# Voir les logs d'installation RADIUS
+sudo tail -f /var/log/sae501_radius_install.log
+
+# Tester la configuration manuellement
+sudo freeradius -X
+
 # Rebooter les services
-sudo systemctl restart radiusd
+sudo systemctl restart freeradius
 sudo systemctl restart mysql
 sudo systemctl restart php-fpm
 sudo systemctl restart apache2
@@ -378,7 +411,7 @@ mysql -u root -p radius < backup_radius_20260123.sql
 sudo apt update && sudo apt upgrade -y
 
 # Vérifier les logs
-sudo journalctl -u radiusd --since today
+sudo journalctl -u freeradius --since today
 ```
 
 ---
@@ -389,11 +422,12 @@ sudo journalctl -u radiusd --since today
 
 **OBLIGATOIRE**:
 - [ ] Changez TOUS les mots de passe par défaut
-- [ ] Générez certificats SSL/TLS valides
+- [ ] Remplacez les certificats auto-signés par des certificats valides (Let's Encrypt)
 - [ ] Activez HTTPS partout
 - [ ] Configurez le firewall UFW
 - [ ] Testez les sauvegardes
 - [ ] Désactivez les accès inutiles
+- [ ] Changez le secret RADIUS `testing123` dans `radius/clients.conf`
 
 **FORTEMENT RECOMMANDÉ**:
 - [ ] Activez 2FA pour PHP-Admin
@@ -434,7 +468,7 @@ sudo tail -f /var/log/syslog
 SAE501/
 ├── scripts/                    # Scripts d'installation
 │   ├── install_mysql.sh        🎆 Base de données
-│   ├── install_radius.sh       🎆 Serveur RADIUS
+│   ├── install_radius.sh       🎆 Serveur RADIUS (100% AUTONOME)
 │   ├── install_php_admin.sh    🎆 Interface web
 │   ├── install_wazuh.sh        🎆 Monitoring (optionnel)
 │   ├── install_hardening.sh    🎆 Sécurité (recommandé)
@@ -442,8 +476,7 @@ SAE501/
 │   └── diagnostics.sh
 │
 ├── radius/                     # Configuration RADIUS
-│   ├── clients.conf
-│   ├── users.txt
+│   ├── clients.conf            ✅ SEUL FICHIER REQUIS
 │   └── sql/
 │       ├── create_tables.sql
 │       └── init_appuser.sql
@@ -483,11 +516,13 @@ SAE501/
 | Problème | Solution |
 |----------|----------|
 | Installation bloque | Vérifier connexion internet: `ping google.com` |
-| RADIUS ne démarre pas | `sudo systemctl status radiusd` ou `sudo radiusd -X` |
+| RADIUS ne démarre pas | `sudo systemctl status freeradius` ou `sudo freeradius -X` |
+| Configuration RADIUS échoue | Vérifier `/var/log/sae501_radius_install.log` |
 | PHP-Admin inaccessible | `sudo systemctl restart apache2 php-fpm` |
 | Wazuh ne répond pas | `sudo systemctl restart wazuh-manager elasticsearch` |
 | Authentification échoue | Vérifier identifiant/mot de passe en PHP-Admin |
 | Connexion Wi-Fi échoue | Vérifier logs: `sudo tail -f /var/log/freeradius/radius.log` |
+| Certificats SSL invalides | Remplacer par Let's Encrypt (voir étape 5.1) |
 
 ---
 
@@ -496,7 +531,7 @@ SAE501/
 ```bash
 # Installation modulaire (DANS L'ORDRE)
 sudo bash scripts/install_mysql.sh
-sudo bash scripts/install_radius.sh
+sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME
 sudo bash scripts/install_php_admin.sh
 sudo bash scripts/install_wazuh.sh        # OPTIONNEL
 sudo bash scripts/install_hardening.sh    # RECOMMANDÉ
@@ -504,15 +539,18 @@ sudo bash scripts/install_hardening.sh    # RECOMMANDÉ
 # Voir l'état du système
 bash scripts/diagnostics.sh
 
-# Générer certificats
-sudo bash scripts/generate_certificates.sh
+# Tester l'authentification RADIUS
+radtest testuser testpass localhost 0 testing123
+
+# Voir logs RADIUS
+sudo tail -f /var/log/freeradius/radius.log
+sudo tail -f /var/log/sae501_radius_install.log
+
+# Mode debug complet
+sudo freeradius -X
 
 # Rebooter services
-sudo systemctl restart radiusd mysql apache2 php-fpm
-
-# Voir logs
-sudo tail -f /var/log/freeradius/radius.log
-sudo tail -f /var/log/syslog
+sudo systemctl restart freeradius mysql apache2 php-fpm
 
 # Accéder MySQL
 mysql -u radiusapp -p radius
@@ -529,8 +567,10 @@ mysqldump -u root -p radius > backup.sql
 - [ ] Debian/Ubuntu 22.04+ installé
 - [ ] Repository SAE501 cloné
 - [ ] Scripts individuels exécutés dans l'ordre
+- [ ] FreeRADIUS démarré et teste `testuser` fonctionne
 - [ ] Mots de passe changés
-- [ ] Certificats SSL/TLS générés (recommandé)
+- [ ] Secret RADIUS changé dans `radius/clients.conf`
+- [ ] Certificats SSL remplacés (production)
 - [ ] PHP-Admin accessible et fonctionnel
 - [ ] Wazuh accessible et fonctionnel (si installé)
 - [ ] Routeur configuré (RADIUS Server, secret)
@@ -546,6 +586,7 @@ mysqldump -u root -p radius > backup.sql
 
 - **Installation modulaire**: 15-20 minutes au total
 - **Flexibilité**: Installez uniquement ce dont vous avez besoin
+- **RADIUS 100% autonome**: Aucun fichier externe requis (sauf `clients.conf`)
 - **Production-ready**: 95% après configuration
 - **Support technique**: Voir les logs ou scripts de diagnostics
 - **Guide sécurité complet**: `docs/HARDENING_GUIDE.md`
@@ -557,7 +598,7 @@ mysqldump -u root -p radius > backup.sql
 ```bash
 # Commencer l'installation modulaire:
 sudo bash scripts/install_mysql.sh
-sudo bash scripts/install_radius.sh
+sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME!
 sudo bash scripts/install_php_admin.sh
 
 # Optionnel - Monitoring:
@@ -568,6 +609,9 @@ sudo bash scripts/install_hardening.sh
 
 # Vérifier l'installation:
 bash scripts/diagnostics.sh
+
+# Tester RADIUS:
+radtest testuser testpass localhost 0 testing123
 
 # Accéder à l'interface:
 http://VOTRE_IP/admin
@@ -582,4 +626,4 @@ cat docs/HARDENING_GUIDE.md
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*
 *Dernière mise à jour: 31 janvier 2026*
-*Version: 2.1 - Installation modulaire*
+*Version: 2.2 - Installation RADIUS 100% autonome*
