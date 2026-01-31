@@ -74,6 +74,12 @@ log_success "Firewall UFW configuré et activé"
 # ============================================================================
 log_info "[3/9] Durcissement SSH..."
 
+# Installer OpenSSH si absent
+if ! command -v sshd &> /dev/null; then
+    log_info "Installation d'OpenSSH Server..."
+    apt-get install -y openssh-server > /dev/null 2>&1
+fi
+
 # Backup
 [ ! -f /etc/ssh/sshd_config.bak ] && cp /etc/ssh/sshd_config /etc/ssh/sshd_config.bak
 
