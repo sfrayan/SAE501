@@ -216,6 +216,161 @@ sudo bash scripts/install_hardening.sh
 
 ---
 
+## **ÉTAPE 3.5: ⚠️ PRÉREQUIS MANUELS OBLIGATOIRES AVANT TESTS**
+
+### 🔧 Configuration manuelle requise (CRITIQUE)
+
+Les scripts automatisent l'installation, mais **3 configurations manuelles** sont **OBLIGATOIRES** avant de passer aux tests:
+
+---
+
+#### 1️⃣ **Créer `radius/clients.conf` avec vos équipements réseau**
+
+**Pourquoi**: FreeRADIUS refuse les connexions des équipements non déclarés (sécurité)
+
+**Fichier**: `/etc/freeradius/3.0/clients.conf`
+
+**Configuration minimale**:
+
+```bash
+# Éditer le fichier
+sudo nano /etc/freeradius/3.0/clients.conf
+
+# Ajouter vos équipements (exemples):
+
+# Point d'accès WiFi
+client access_point_1 {
+    ipaddr = 192.168.1.100
+    secret = VotreSecret@Securise123!
+    shortname = AP-Bureau
+}
+
+# Switch réseau
+client switch_1 {
+    ipaddr = 192.168.1.50
+    secret = VotreSecret@Securise123!
+    shortname = Switch-Etage1
+}
+
+# Sous-réseau complet (alternative)
+client reseau_wifi {
+    ipaddr = 192.168.1.0/24
+    secret = VotreSecret@Securise123!
+    shortname = WiFi-Network
+}
+```
+
+**🚨 SÉCURITÉ**: 
+- Changez `testing123` par un secret FORT (min 20 caractères, lettres+chiffres+symboles)
+- **MÊME secret sur le routeur/AP et dans clients.conf**
+
+**Redémarrer RADIUS**:
+```bash
+sudo systemctl restart freeradius
+sudo systemctl status freeradius  # Vérifier OK
+```
+
+---
+
+#### 2️⃣ **Générer ou importer certificats TLS (PEAP-MSCHAPv2)**
+
+**Pourquoi**: EAP-PEAP nécessite un certificat serveur pour chiffrer les échanges
+
+**Option A - Auto-généré (LAB/TEST uniquement)**:
+
+```bash
+# Exécuter le générateur de certificats auto-signés
+sudo bash scripts/generate_certificates.sh
+
+# Résultat:
+# ✅ Certificat créé dans /etc/freeradius/3.0/certs/
+# ✅ Validité: 365 jours
+# ⚠️  Auto-signé = Avertissement sur clients (acceptable en lab)
+```
+
+**Option B - Certificat signé PRODUCTION (Let's Encrypt/DigiCert)**:
+
+```bash
+# Installer certbot
+sudo apt install certbot -y
+
+# Obtenir certificat (nécessite un domaine)
+sudo certbot certonly --standalone -d radius.votredomaine.com
+
+# Copier dans FreeRADIUS
+sudo cp /etc/letsencrypt/live/radius.votredomaine.com/fullchain.pem \
+    /etc/freeradius/3.0/certs/server.pem
+sudo cp /etc/letsencrypt/live/radius.votredomaine.com/privkey.pem \
+    /etc/freeradius/3.0/certs/server.key
+
+# Permissions
+sudo chown freerad:freerad /etc/freeradius/3.0/certs/server.*
+sudo chmod 640 /etc/freeradius/3.0/certs/server.*
+
+# Redémarrer
+sudo systemctl restart freeradius
+```
+
+**🔒 Renouvellement automatique (Let's Encrypt)**:
+```bash
+sudo crontab -e
+# Ajouter:
+0 3 * * * certbot renew --quiet --post-hook "systemctl restart freeradius"
+```
+
+---
+
+#### 3️⃣ **Configurer les utilisateurs RADIUS**
+
+**Pourquoi**: Base de données vide après installation (sauf utilisateur test)
+
+**Option A - Via phpMyAdmin (✅ RECOMMANDÉ)**:
+
+1. Accédez à `http://VOTRE_IP/admin`
+2. Login: `admin` / `Admin@Secure123!`
+3. Cliquez **"➕ Ajouter utilisateur"**
+4. Entrez:
+   - Username: `jean.dupont`
+   - Password: `Passe@Complexe123`
+5. Cliquez **"✅ Ajouter"**
+
+**Option B - Via SQL direct**:
+
+```bash
+mysql -u root -p radius
+# Enter password: MySQL@Root123!
+
+-- Ajouter utilisateur
+INSERT INTO radcheck (username, attribute, op, value) 
+VALUES ('jean.dupont', 'Cleartext-Password', ':=', 'Passe@Complexe123');
+
+-- Vérifier
+SELECT * FROM radcheck;
+
+EXIT;
+```
+
+**Tester l'authentification**:
+```bash
+radtest jean.dupont Passe@Complexe123 localhost 0 testing123
+# Attendu: Received Access-Accept
+```
+
+---
+
+### ✅ Checklist avant tests
+
+- [ ] `clients.conf` créé avec au moins 1 client RADIUS
+- [ ] Secret RADIUS changé (plus `testing123`)
+- [ ] Certificats TLS générés (auto-signé OK pour lab)
+- [ ] FreeRADIUS redémarré sans erreur
+- [ ] Au moins 1 utilisateur créé (autre que `testuser`)
+- [ ] Test `radtest` réussit
+
+**Si tous ces points sont OK, passez à l'ÉTAPE 4 (tests)**
+
+---
+
 ## **ÉTAPE 4: Vérifier l'installation**
 
 ### 4.1 Exécuter la suite complète de tests ✨ **NOUVEAU**
@@ -348,9 +503,278 @@ sudo systemctl enable certbot.timer
 
 ---
 
-## **ÉTAPE 6: Configurer le routeur Wi-Fi**
+## **ÉTAPE 6: ⚠️ AMÉLIORATIONS PRODUCTION CRITIQUE**
 
-### 6.1 Accéder à l'interface du routeur
+### 🏭 Passage en environnement de production
+
+L'installation actuelle est **opérationnelle pour lab/test**. Pour un **déploiement production critique**, implémentez ces améliorations:
+
+---
+
+#### 1️⃣ **Certificats TLS signés (Let's Encrypt/DigiCert)**
+
+**Problème actuel**: Certificats auto-signés = avertissements clients
+
+**Solution production**:
+
+```bash
+# Option A - Let's Encrypt (gratuit, renouvelable auto)
+sudo certbot certonly --standalone -d radius.votredomaine.com
+
+# Lier à FreeRADIUS (voir ÉTAPE 3.5 section 2)
+
+# Option B - Certificat commercial (DigiCert, Sectigo)
+# 1. Générer CSR
+openssl req -new -newkey rsa:4096 -nodes \
+  -keyout /etc/freeradius/3.0/certs/server.key \
+  -out /etc/freeradius/3.0/certs/server.csr
+
+# 2. Soumettre CSR à l'autorité de certification
+# 3. Installer certificat signé reçu
+# 4. Redémarrer FreeRADIUS
+```
+
+**Bénéfices**:
+- ✅ Pas d'avertissement sur clients WiFi
+- ✅ Confiance native (certificat reconnu)
+- ✅ Conformité standards entreprise
+
+---
+
+#### 2️⃣ **Secrets externes (Vault/AWS Secrets Manager)**
+
+**Problème actuel**: Secrets en clair dans `/opt/sae501/secrets/db.env`
+
+**Solution production - HashiCorp Vault**:
+
+```bash
+# Installer Vault
+wget -O- https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg
+echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/hashicorp.list
+sudo apt update && sudo apt install vault -y
+
+# Initialiser Vault
+vault server -dev  # DEV MODE - en prod utiliser config production
+
+# Stocker secret MySQL
+vault kv put secret/sae501/mysql \
+  user="radiususer" \
+  password="VotreMotDePasseTrèsComplexe@2026"
+
+# Récupérer dans script (exemple)
+DB_PASSWORD=$(vault kv get -field=password secret/sae501/mysql)
+```
+
+**Solution production - AWS Secrets Manager**:
+
+```bash
+# Installer AWS CLI
+sudo apt install awscli -y
+
+# Configurer credentials
+aws configure
+
+# Créer secret
+aws secretsmanager create-secret \
+  --name sae501/mysql \
+  --secret-string '{"user":"radiususer","password":"Complexe@2026"}'
+
+# Récupérer dans script
+DB_PASSWORD=$(aws secretsmanager get-secret-value \
+  --secret-id sae501/mysql \
+  --query SecretString --output text | jq -r .password)
+```
+
+**Bénéfices**:
+- ✅ Rotation automatique des secrets
+- ✅ Audit centralisé (qui a accédé au secret)
+- ✅ Chiffrement au repos + en transit
+- ✅ Conformité SOC2/ISO27001
+
+---
+
+#### 3️⃣ **Réplication RADIUS secondaire (Haute Disponibilité)**
+
+**Problème actuel**: Serveur unique = point de défaillance unique (SPOF)
+
+**Solution production - Serveur secondaire + Load Balancer**:
+
+**Architecture cible**:
+```
+             Load Balancer (HAProxy)
+                   |
+        +-----------+-----------+
+        |                       |
+   RADIUS-1 (Master)      RADIUS-2 (Standby)
+        |                       |
+        +-----------+-----------+
+                   |
+              MySQL Cluster
+           (Master-Slave Replication)
+```
+
+**Étapes de mise en œuvre**:
+
+```bash
+# Sur RADIUS-1 (existant):
+# Configurer réplication MySQL
+sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
+# Ajouter:
+[mysqld]
+server-id = 1
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_do_db = radius
+
+mysql -u root -p
+CREATE USER 'replicator'@'%' IDENTIFIED BY 'Repl@Password2026';
+GRANT REPLICATION SLAVE ON *.* TO 'replicator'@'%';
+FLUSH PRIVILEGES;
+SHOW MASTER STATUS;  # Noter File et Position
+
+# Sur RADIUS-2 (nouveau serveur):
+# Cloner SAE501 et installer (même procédure ÉTAPE 1-3)
+
+# Configurer réplication MySQL
+sudo nano /etc/mysql/mysql.conf.d/mysqld.cnf
+# Ajouter:
+[mysqld]
+server-id = 2
+log_bin = /var/log/mysql/mysql-bin.log
+binlog_do_db = radius
+relay_log = /var/log/mysql/mysql-relay-bin.log
+
+mysql -u root -p
+CHANGE MASTER TO 
+  MASTER_HOST='IP_RADIUS_1',
+  MASTER_USER='replicator',
+  MASTER_PASSWORD='Repl@Password2026',
+  MASTER_LOG_FILE='mysql-bin.000001',  # Depuis SHOW MASTER STATUS
+  MASTER_LOG_POS=123456;  # Depuis SHOW MASTER STATUS
+START SLAVE;
+SHOW SLAVE STATUS\G  # Vérifier Slave_IO_Running: Yes
+
+# Installer HAProxy (load balancer)
+sudo apt install haproxy -y
+
+sudo nano /etc/haproxy/haproxy.cfg
+# Ajouter:
+listen radius
+    bind *:1812
+    mode tcp
+    balance roundrobin
+    server radius1 IP_RADIUS_1:1812 check
+    server radius2 IP_RADIUS_2:1812 check backup
+
+sudo systemctl restart haproxy
+```
+
+**Bénéfices**:
+- ✅ Disponibilité 99.9% (pas d'interruption si serveur 1 tombe)
+- ✅ Basculement automatique (failover)
+- ✅ Scalabilité horizontale (ajout serveurs)
+
+---
+
+#### 4️⃣ **Archivage logs long-terme (Syslog centralisé)**
+
+**Problème actuel**: Logs locaux = perte en cas de compromission serveur
+
+**Solution production - Syslog centralisé (rsyslog + S3/ELK)**:
+
+```bash
+# Sur serveur RADIUS:
+sudo nano /etc/rsyslog.d/50-sae501.conf
+# Ajouter:
+# Envoyer logs FreeRADIUS vers serveur centralisé
+$ModLoad imfile
+$InputFileName /var/log/freeradius/radius.log
+$InputFileTag radius:
+$InputFileStateFile stat-radius
+$InputFileSeverity info
+$InputFileFacility local7
+$InputRunFileMonitor
+
+*.* @@syslog-central.entreprise.com:514  # TCP sécurisé
+
+sudo systemctl restart rsyslog
+
+# Option alternative - Envoyer vers AWS S3:
+sudo apt install awscli -y
+
+# Script de backup quotidien
+sudo nano /usr/local/bin/backup_radius_logs.sh
+#!/bin/bash
+DATE=$(date +%Y%m%d)
+tar -czf /tmp/radius-logs-$DATE.tar.gz /var/log/freeradius/
+aws s3 cp /tmp/radius-logs-$DATE.tar.gz s3://entreprise-radius-logs/
+rm /tmp/radius-logs-$DATE.tar.gz
+
+sudo chmod +x /usr/local/bin/backup_radius_logs.sh
+
+# Cron quotidien (3h du matin)
+sudo crontab -e
+0 3 * * * /usr/local/bin/backup_radius_logs.sh
+```
+
+**Solution avancée - Stack ELK (Elasticsearch + Logstash + Kibana)**:
+
+```bash
+# Installer Filebeat (déjà présent si Wazuh installé)
+sudo apt install filebeat -y
+
+sudo nano /etc/filebeat/filebeat.yml
+# Configurer:
+filebeat.inputs:
+- type: log
+  enabled: true
+  paths:
+    - /var/log/freeradius/*.log
+  fields:
+    service: radius
+    environment: production
+
+output.elasticsearch:
+  hosts: ["elk.entreprise.com:9200"]
+  username: "filebeat"
+  password: "VotrePassword"
+
+sudo systemctl restart filebeat
+```
+
+**Bénéfices**:
+- ✅ Logs immuables (forensics post-incident)
+- ✅ Rétention long-terme (7 ans pour conformité)
+- ✅ Requêtes rapides (recherche centralisée)
+- ✅ Détection anomalies (ML/IA sur logs agrégés)
+
+---
+
+### ✅ Checklist Production Critique
+
+**Obligatoire avant mise en production**:
+- [ ] 🔒 Certificats TLS signés (Let's Encrypt/commercial)
+- [ ] 🔐 Secrets externalisés (Vault/AWS Secrets Manager)
+- [ ] ⚖️ Haute disponibilité (2+ serveurs RADIUS + load balancer)
+- [ ] 📊 Logs centralisés (syslog distant ou S3/ELK)
+- [ ] 🛡️ WAF activé devant phpMyAdmin (ModSecurity/Cloudflare)
+- [ ] 🔄 Sauvegardes automatisées testées (RPO < 1h)
+- [ ] 📋 Plan de reprise d'activité (RTO < 4h)
+- [ ] 👥 Équipe astreinte formée (procédures incident)
+- [ ] 🧪 Tests de charge validés (1000+ utilisateurs simultanés)
+- [ ] 📜 Conformité validée (RGPD, ISO27001 si applicable)
+
+**Recommandations supplémentaires**:
+- [ ] Monitoring APM (Datadog/New Relic)
+- [ ] Alertes PagerDuty/Opsgenie
+- [ ] Backup géo-répliqué (3-2-1 rule)
+- [ ] Tests de pénétration annuels
+- [ ] Revue de code sécurité (SAST/DAST)
+
+---
+
+## **ÉTAPE 7: Configurer le routeur Wi-Fi**
+
+### 7.1 Accéder à l'interface du routeur
 
 ```
 URL: http://192.168.1.1
@@ -358,7 +782,7 @@ Login: admin
 Password: admin (par défaut TP-Link)
 ```
 
-### 6.2 Configurer l'authentification Wi-Fi
+### 7.2 Configurer l'authentification Wi-Fi
 
 1. Allez dans **Wireless Settings** ou **Security**
 2. Sélectionnez le SSID d'entreprise
@@ -369,7 +793,7 @@ Password: admin (par défaut TP-Link)
 7. **Shared Secret**: `testing123` (ou votre secret modifié)
 8. **Cliquer Save**
 
-### 6.3 Tester la connexion
+### 7.3 Tester la connexion
 
 Sur un ordinateur:
 1. Chercher le réseau Wi-Fi
@@ -381,9 +805,9 @@ Sur un ordinateur:
 
 ---
 
-## **ÉTAPE 7: Gestion des utilisateurs avec PHP-Admin**
+## **ÉTAPE 8: Gestion des utilisateurs avec PHP-Admin**
 
-### 7.1 Ajouter un utilisateur
+### 8.1 Ajouter un utilisateur
 
 **Via PHP-Admin** (✅ **RECOMMANDÉ**):
 1. Accédez à `http://VOTRE_IP/admin`
@@ -400,14 +824,14 @@ Sur un ordinateur:
 - ✅ Aucune commande SQL manuelle
 - ✅ Connexion MySQL fonctionnelle (bug corrigé!)
 
-### 7.2 Lister les utilisateurs
+### 8.2 Lister les utilisateurs
 
 **Via PHP-Admin**:
 1. Cliquez "👥 Utilisateurs"
 2. Voir tous les comptes créés
 3. Actions: ✏️ Modifier, 🗑️ Supprimer
 
-### 7.3 Consulter les logs d'authentification
+### 8.3 Consulter les logs d'authentification
 
 **Via PHP-Admin**:
 1. Cliquez "📄 Logs d'audit"
@@ -421,9 +845,9 @@ sudo tail -f /var/log/freeradius/radius.log
 
 ---
 
-## **ÉTAPE 8: Monitoring avec Wazuh Dashboard 🆕**
+## **ÉTAPE 9: Monitoring avec Wazuh Dashboard 🆕**
 
-### 8.1 Accéder au Dashboard Wazuh
+### 9.1 Accéder au Dashboard Wazuh
 
 ```
 URL: http://VOTRE_IP:5601
@@ -437,7 +861,7 @@ Mot de passe: Admin@Wazuh123!  (CHANGEZ-LE!)
 3. **Integrity Monitoring** (📄): Surveillance fichiers
 4. **RADIUS Logs**: Authentifications réussies/échouées
 
-### 8.2 Règles d'alerte personnalisées RADIUS
+### 9.2 Règles d'alerte personnalisées RADIUS
 
 Le script Wazuh crée automatiquement **10 règles** spécifiques:
 
@@ -456,9 +880,9 @@ Le script Wazuh crée automatiquement **10 règles** spécifiques:
 
 ---
 
-## **ÉTAPE 9: Maintenance et surveillance**
+## **ÉTAPE 10: Maintenance et surveillance**
 
-### 9.1 Sauvegarder la base de données
+### 10.1 Sauvegarder la base de données
 
 ```bash
 # Sauvegarde complète
@@ -476,7 +900,7 @@ tar -czf backup_hardening_$(date +%Y%m%d).tar.gz \
   /etc/sysctl.d/99-sae501-hardening.conf
 ```
 
-### 9.2 Restaurer une sauvegarde
+### 10.2 Restaurer une sauvegarde
 
 ```bash
 # Si problème, restaurer
@@ -485,7 +909,7 @@ tar -xzf backup_wazuh_20260131.tar.gz -C /
 tar -xzf backup_hardening_20260131.tar.gz -C /
 ```
 
-### 9.3 Surveillance quotidienne
+### 10.3 Surveillance quotidienne
 
 ```bash
 # Vérifier logs Fail2Ban
@@ -508,7 +932,7 @@ sudo ausearch -k sshd_config_changes -ts today
 sudo ausearch -k mysql_config_changes -ts today
 ```
 
-### 9.4 Maintenance régulière
+### 10.4 Maintenance régulière
 
 ```bash
 # Chaque semaine:
@@ -723,6 +1147,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - [ ] Debian/Ubuntu 22.04+ installé
 - [ ] Repository SAE501 cloné
 - [ ] Scripts exécutés dans l'ordre
+- [ ] **Prérequis manuels complétés** (clients.conf, certificats, utilisateurs) 🆕
 - [ ] **Tous les tests passés** (`sudo bash tests/run_all_tests.sh`) ✨
 - [ ] FreeRADIUS démarré et test `testuser` fonctionne
 - [ ] **PHP-Admin accessible sur http://IP/admin** ✅ v2.2.0
@@ -746,11 +1171,17 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - [ ] Logs d'audit consultés
 - [ ] Sauvegardes testées (restauration)
 
-### Production
-- [ ] Surveillance quotidienne établie
-- [ ] Procédure de sauvegarde automatisée
-- [ ] Documentation interne rédigée
-- [ ] Plan de réponse aux incidents
+### Production Critique 🏭 🆕
+- [ ] 🔒 Certificats TLS signés (Let's Encrypt/commercial)
+- [ ] 🔐 Secrets externalisés (Vault/AWS Secrets Manager)
+- [ ] ⚖️ Haute disponibilité (2+ serveurs + load balancer)
+- [ ] 📊 Logs centralisés (syslog distant/S3/ELK)
+- [ ] 🛡️ WAF activé (ModSecurity/Cloudflare)
+- [ ] 🔄 Sauvegardes géo-répliquées testées
+- [ ] 📋 Plan de reprise d'activité (DRP)
+- [ ] 👥 Équipe astreinte formée
+- [ ] 🧪 Tests de charge validés (1000+ users)
+- [ ] 📜 Conformité validée (RGPD/ISO27001)
 
 ---
 
@@ -763,7 +1194,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - **Wazuh 100% autonome**: Manager + Dashboard en un seul script
 - **Hardening 100% autonome**: ⭐🆕 9 modules de sécurité en 1 commande
 - **Tests automatisés**: ✨ Suite complète pour validation
-- **Production-ready**: 98% après configuration
+- **Production-ready**: 98% après configuration manuelle + améliorations critiques 🆕
 
 ---
 
@@ -778,6 +1209,11 @@ sudo bash scripts/install_hardening.sh     # ✨ 100% AUTONOME ⭐🆕
 
 # Optionnel - Monitoring avancé:
 sudo bash scripts/install_wazuh.sh        # ✨ 100% AUTONOME
+
+# OBLIGATOIRE - Prérequis manuels (ÉTAPE 3.5):
+# 1. Configurer clients.conf
+# 2. Générer certificats TLS
+# 3. Créer utilisateurs RADIUS
 
 # Vérifier l'installation avec tests automatisés:
 sudo bash tests/run_all_tests.sh          # ✨ NOUVEAU
@@ -799,7 +1235,10 @@ User: admin | Pass: Admin@Secure123!
 radtest testuser testpass localhost 0 testing123
 ```
 
-**Le système est prêt pour la production après changement des mots de passe! ✅**
+**Le système est prêt pour la production après:**
+1. ✅ Prérequis manuels (ÉTAPE 3.5)
+2. ✅ Changement mots de passe (ÉTAPE 5)
+3. ✅ Améliorations production critique (ÉTAPE 6) 🆕
 
 ---
 
@@ -814,4 +1253,4 @@ radtest testuser testpass localhost 0 testing123
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*  
 *Dernière mise à jour: 31 janvier 2026*  
-*Version: 4.2 - ✅ BUG FIX v2.2.0 + Tests automatisés*
+*Version: 4.3 - ✅ BUG FIX v2.2.0 + Tests automatisés + Prérequis production* 🆕
