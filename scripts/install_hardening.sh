@@ -4,7 +4,7 @@
 #                    SAE501 - SYSTÈME HARDENING COMPLET                    #
 #       Configuration sécurité automatisée - Prêt pour production         #
 #                     Author: SAE501 Security Team                         #
-#                          Version: 2.0                                    #
+#                          Version: 2.1                                    #
 #############################################################################
 
 set -euo pipefail
@@ -365,6 +365,9 @@ DROP DATABASE IF EXISTS test;
 DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%';
 FLUSH PRIVILEGES;
 EOFMYSQL
+
+    # Créer le répertoire de configuration si absent
+    mkdir -p /etc/mysql/mysql.conf.d
 
     # Configuration hardening
     cat > /etc/mysql/mysql.conf.d/sae501-hardening.cnf << 'EOFMYSQLCONF'
