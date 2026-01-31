@@ -7,8 +7,8 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 - 👎 Gestion centralisée des utilisateurs
 - 📊 Monitoring et détection d'anomalies
 - 🔐 Logs d'audit complets
-- 🎐 Installation et déploiement rapides
-- 🛡️ **Hardening sécurité complet (NOUVEAU)**
+- 🎐 Installation modulaire et personnalisable
+- 🛡️ **Hardening sécurité complet**
 
 ---
 
@@ -89,31 +89,34 @@ chmod +x scripts/*.sh
 
 ---
 
-## **ÉTAPE 3: Installation automatisée (RECOMMANDÉ)**
+## **ÉTAPE 3: Installation modulaire (RECOMMANDÉ)**
 
-### 💉 Installation complète en 1 seule commande
+### 💉 Installation par étapes - Exécuter dans l'ordre
 
 ```bash
-sudo bash scripts/install_all.sh
+# 1. Installer MySQL et créer la base de données
+sudo bash scripts/install_mysql.sh
+
+# 2. Installer FreeRADIUS
+sudo bash scripts/install_radius.sh
+
+# 3. Installer PHP-Admin (interface web)
+sudo bash scripts/install_php_admin.sh
+
+# 4. Installer Wazuh (monitoring) - OPTIONNEL
+sudo bash scripts/install_wazuh.sh
+
+# 5. Appliquer le hardening sécurité - RECOMMANDÉ
+sudo bash scripts/install_hardening.sh
 ```
 
-**Qu'est-ce que ce script fait?**
-1. Met à jour le système
-2. Installe FreeRADIUS
-3. Installe MySQL et crée la base RADIUS
-4. Installe PHP-Admin (interface web)
-5. Installe Wazuh (monitoring)
-6. **Configure le hardening sécurité ⭐ NOUVEAU**
-7. Lance les diagnostics
+**Durée estimée**: 15-20 minutes au total
 
-**Durée estimée**: 15-20 minutes
-
-**Affichage final**:
-```
-✅ Identifiants d'accès
-✅ URLs des interfaces
-✅ Recommandations de sécurité
-```
+**Avantages de l'installation modulaire**:
+- ✅ Contrôle total sur chaque composant
+- ✅ Possibilité de sauter des modules (ex: Wazuh)
+- ✅ Debugging facilité en cas de problème
+- ✅ Installation personnalisée selon vos besoins
 
 ---
 
@@ -122,7 +125,7 @@ sudo bash scripts/install_all.sh
 ### 4.1 Vérifier les services
 ```bash
 # Affiche l'état de tous les services
-bash scripts/show_credentials.sh
+bash scripts/diagnostics.sh
 ```
 
 Vous devriez voir:
@@ -130,33 +133,19 @@ Vous devriez voir:
 - ✓ MySQL ACTIF
 - ✓ PHP-FPM ACTIF
 - ✓ Apache2 ACTIF
-- ✓ Wazuh Manager ACTIF
-- ✓ Elasticsearch ACTIF
+- ✓ Wazuh Manager ACTIF (si installé)
+- ✓ Elasticsearch ACTIF (si installé)
 
-### 4.2 Lancer les tests automatisés
+### 4.2 Vérifier les accès
 ```bash
-bash scripts/test_installation.sh
+bash scripts/diagnostics.sh
 ```
 
-Résultat attendu: **✅ 10/10 tests réussis**
-
-### 4.3 Lancer les tests sécurité ⭐ NOUVEAU
-```bash
-sudo bash scripts/test_security.sh
-```
-
-Résultat attendu: **✅ 20+/20+ tests sécurité réussis**
-
-### 4.4 Vérifier les accès
-```bash
-bash scripts/show_credentials.sh
-```
-
-Nota les identifiants affichés!
+Notez les identifiants affichés!
 
 ---
 
-## **ÉTAPE 5: Configuration Sécurité Avancée (NOUVEAU) ⭐**
+## **ÉTAPE 5: Configuration Sécurité Avancée (RECOMMANDÉ) ⭐**
 
 ### 5.1 Générer les certificats SSL/TLS
 
@@ -210,7 +199,7 @@ Mot de passe: Admin@Secure123! (affiché en fin d'install)
 3. Configurez le secret RADIUS
 4. Configurez l'IP du routeur NAS
 
-### 6.2 Accéder à Wazuh
+### 6.2 Accéder à Wazuh (si installé)
 
 ```
 URL: https://VOTRE_IP:5601
@@ -228,12 +217,12 @@ Mot de passe: SecurePassword123! (affiché en fin d'install)
 
 ```bash
 # Afficher les mots de passe actuels
-bash scripts/show_credentials.sh
+bash scripts/diagnostics.sh
 
 # Changer dans PHP-Admin:
 # Admin: Admin@Secure123! → VotreMot@Passe123!
 
-# Changer dans Wazuh:
+# Changer dans Wazuh (si installé):
 # Admin: SecurePassword123! → VotreMot@Passe123!
 
 # Changer MySQL root:
@@ -274,7 +263,7 @@ Sur un ordinateur:
 3. Type d'authentification: WPA-Enterprise
 4. Entrer un identifiant RADIUS créé en PHP-Admin
 5. Entrer le mot de passe
-6. Vérifier dans les logs: `bash scripts/show_credentials.sh` → Logs d'authentification
+6. Vérifier dans les logs: `bash scripts/diagnostics.sh` → Logs d'authentification
 
 ---
 
@@ -324,7 +313,7 @@ sudo tail -f /var/log/freeradius/radius.log
 
 ## **ÉTAPE 9: Monitoring et sécurité**
 
-### 9.1 Consulter le monitoring Wazuh
+### 9.1 Consulter le monitoring Wazuh (si installé)
 
 1. Accédez à `https://VOTRE_IP:5601`
 2. **Onglet Agents**: voir état système
@@ -342,24 +331,18 @@ sudo tail -f /var/log/freeradius/radius.log
 
 **Si quelque chose ne fonctionne pas**:
 ```bash
-# Tests complets
-bash scripts/test_installation.sh
-
-# Tests sécurité
-sudo bash scripts/test_security.sh
-
 # Diagnostics détaillés
 bash scripts/diagnostics.sh
 
 # Voir les logs
-bash scripts/show_credentials.sh
+sudo tail -f /var/log/freeradius/radius.log
 
 # Rebooter les services
 sudo systemctl restart radiusd
 sudo systemctl restart mysql
 sudo systemctl restart php-fpm
 sudo systemctl restart apache2
-sudo systemctl restart wazuh-manager
+sudo systemctl restart wazuh-manager  # si installé
 ```
 
 ---
@@ -387,7 +370,7 @@ mysql -u root -p radius < backup_radius_20260123.sql
 ```bash
 # Chaque semaine:
 # - Consulter les logs d'audit en PHP-Admin
-# - Vérifier Wazuh pour anomalies
+# - Vérifier Wazuh pour anomalies (si installé)
 # - Faire une sauvegarde
 
 # Chaque mois:
@@ -397,62 +380,6 @@ sudo apt update && sudo apt upgrade -y
 # Vérifier les logs
 sudo journalctl -u radiusd --since today
 ```
-
----
-
-## 🌐 GitHub Pages & GitHub Actions
-
-### 🎇 GitHub Pages (Documentation en ligne)
-
-**Status**: ✅ PRÊT
-
-La documentation est disponible sur:
-```
-https://sfrayan.github.io/SAE501
-```
-
-**Pour activer**:
-1. Allez dans **Settings** → **Pages**
-2. Branch: `main`
-3. Folder: `/docs`
-4. Cliquez "Save"
-5. Site accessible automatiquement en 1-2 minutes
-
-**Contenu**:
-- Page d'accueil avec guide rapide
-- Liens vers toute la documentation
-- Architecture technique
-- Guide de sécurité
-
-### ⚙️ GitHub Actions (CI/CD automatisé)
-
-**Status**: ✅ ACTIVÉ
-
-**Workflows configurés**:
-
-#### 1. **CI Tests** (ci-tests.yml)
-
-À chaque push sur `main` ou `develop`:
-- ✓ Lint Bash scripts (ShellCheck)
-- ✓ Validation fichiers config (SQL, PHP)
-- ✓ Scan secrets (TruffleHog)
-- ✓ Vérification documentation
-- ✓ Test scripts installation
-- ✓ Test sécurité (NOUVEAU)
-
-Résultat: **Badge automatique** ✅
-
-#### 2. **Deploy Pages** (deploy-pages.yml)
-
-À chaque push dans `docs/`:
-- ✓ Build documentation (Jekyll)
-- ✓ Deploy automatique GitHub Pages
-- ✓ URL: `https://sfrayan.github.io/SAE501`
-
-**Voir l'état des workflows**:
-1. Allez sur GitHub → **Actions**
-2. Voir l'historique et état des builds
-3. Vérifier logs en cas d'erreur
 
 ---
 
@@ -467,12 +394,11 @@ Résultat: **Badge automatique** ✅
 - [ ] Configurez le firewall UFW
 - [ ] Testez les sauvegardes
 - [ ] Désactivez les accès inutiles
-- [ ] Lancez tests sécurité: `sudo bash scripts/test_security.sh`
 
 **FORTEMENT RECOMMANDÉ**:
 - [ ] Activez 2FA pour PHP-Admin
 - [ ] Limitez l'accès SSH (clés uniquement)
-- [ ] Configurez les alertes Wazuh
+- [ ] Configurez les alertes Wazuh (si installé)
 - [ ] Mettez en place des backups automatiques
 - [ ] Utilisez un VPN pour administrer
 - [ ] Lisez le guide complet: `docs/HARDENING_GUIDE.md`
@@ -486,7 +412,7 @@ sudo ufw allow 22/tcp      # SSH
 sudo ufw allow 80/tcp      # HTTP
 sudo ufw allow 443/tcp     # HTTPS
 sudo ufw allow 1812/udp    # RADIUS
-sudo ufw allow 5601/tcp    # Wazuh
+sudo ufw allow 5601/tcp    # Wazuh (si installé)
 
 # 2. SSH sécurisé
 sudo nano /etc/ssh/sshd_config
@@ -498,9 +424,6 @@ sudo nano /etc/ssh/sshd_config
 # 3. Logs régulièrement audités
 sudo tail -f /var/log/auth.log
 sudo tail -f /var/log/syslog
-
-# 4. Tests sécurité réguliers
-sudo bash scripts/test_security.sh
 ```
 
 ---
@@ -510,16 +433,13 @@ sudo bash scripts/test_security.sh
 ```
 SAE501/
 ├── scripts/                    # Scripts d'installation
-│   ├── install_all.sh          🎆 PRINCIPAL
-│   ├── install_radius.sh
-│   ├── install_php_admin.sh
-│   ├── install_wazuh.sh
-│   ├── install_hardening.sh    ⭐ NOUVEAU
-│   ├── test_security.sh        ⭐ NOUVEAU
-│   ├── generate_certificates.sh ⭐ NOUVEAU
-│   ├── diagnostics.sh
-│   ├── show_credentials.sh
-│   └── test_installation.sh
+│   ├── install_mysql.sh        🎆 Base de données
+│   ├── install_radius.sh       🎆 Serveur RADIUS
+│   ├── install_php_admin.sh    🎆 Interface web
+│   ├── install_wazuh.sh        🎆 Monitoring (optionnel)
+│   ├── install_hardening.sh    🎆 Sécurité (recommandé)
+│   ├── generate_certificates.sh
+│   └── diagnostics.sh
 │
 ├── radius/                     # Configuration RADIUS
 │   ├── clients.conf
@@ -547,18 +467,11 @@ SAE501/
 │   ├── local_rules.xml
 │   └── syslog-tlmr100.conf
 │
-├── docs/                       # Documentation & GitHub Pages
-│   ├── index.md                🎆 Page d'accueil
-│   ├── _config.yml             🎆 Configuration Jekyll
-│   ├── HARDENING_GUIDE.md      ⭐ NOUVEAU
+├── docs/                       # Documentation
+│   ├── HARDENING_GUIDE.md
 │   ├── dossier-architecture.md
 │   ├── hardening-linux.md
 │   └── journal-de-bord.md
-│
-├── .github/
-│   └── workflows/
-│       ├── ci-tests.yml            🎆 Tests automatisés
-│       └── deploy-pages.yml        🎆 Déploiement Pages
 │
 └── README.md                   # CE FICHIER
 ```
@@ -575,35 +488,27 @@ SAE501/
 | Wazuh ne répond pas | `sudo systemctl restart wazuh-manager elasticsearch` |
 | Authentification échoue | Vérifier identifiant/mot de passe en PHP-Admin |
 | Connexion Wi-Fi échoue | Vérifier logs: `sudo tail -f /var/log/freeradius/radius.log` |
-| Tests sécurité échouent | Vérifier `docs/HARDENING_GUIDE.md` et relancer `sudo bash scripts/test_security.sh` |
-| GitHub Pages ne s'affiche pas | Vérifier Settings → Pages et attendre 2 min |
-| Tests CI échouent | Vérifier **Actions** pour les erreurs |
 
 ---
 
 ## 📚 Commandes essentielles
 
 ```bash
-# Installation (UNE SEULE FOIS)
-sudo bash scripts/install_all.sh
+# Installation modulaire (DANS L'ORDRE)
+sudo bash scripts/install_mysql.sh
+sudo bash scripts/install_radius.sh
+sudo bash scripts/install_php_admin.sh
+sudo bash scripts/install_wazuh.sh        # OPTIONNEL
+sudo bash scripts/install_hardening.sh    # RECOMMANDÉ
 
-# Vérifier installation
-bash scripts/test_installation.sh
-
-# Tests sécurité (RECOMMANDÉ)
-sudo bash scripts/test_security.sh
-
-# Voir accès
-bash scripts/show_credentials.sh
-
-# Diagnostics
+# Voir l'état du système
 bash scripts/diagnostics.sh
 
 # Générer certificats
 sudo bash scripts/generate_certificates.sh
 
 # Rebooter services
-sudo systemctl restart radiusd mysql apache2 php-fpm wazuh-manager
+sudo systemctl restart radiusd mysql apache2 php-fpm
 
 # Voir logs
 sudo tail -f /var/log/freeradius/radius.log
@@ -623,55 +528,51 @@ mysqldump -u root -p radius > backup.sql
 - [ ] VM créée (4GB RAM, 2 CPU, 50GB disque)
 - [ ] Debian/Ubuntu 22.04+ installé
 - [ ] Repository SAE501 cloné
-- [ ] `sudo bash scripts/install_all.sh` exécuté
-- [ ] 10/10 tests réussis
-- [ ] 20+/20+ tests sécurité réussis ⭐ NOUVEAU
+- [ ] Scripts individuels exécutés dans l'ordre
 - [ ] Mots de passe changés
-- [ ] Certificats SSL/TLS générés ⭐ NOUVEAU
+- [ ] Certificats SSL/TLS générés (recommandé)
 - [ ] PHP-Admin accessible et fonctionnel
-- [ ] Wazuh accessible et fonctionnel
+- [ ] Wazuh accessible et fonctionnel (si installé)
 - [ ] Routeur configuré (RADIUS Server, secret)
 - [ ] Utilisateur test créé en PHP-Admin
 - [ ] Connexion Wi-Fi testée et fonctionnelle
 - [ ] Logs d'audit consultés
 - [ ] Firewall UFW configuré
 - [ ] Sauvegardes planifiées
-- [ ] **GitHub Pages activé** (optionnel mais recommandé)
-- [ ] **GitHub Actions fonctionne** (automatique)
 
 ---
 
 ## 📄 Informations importantes
 
-- **Installation défaut**: 5-10 minutes avec `install_all.sh`
-- **Durée sans script**: 1-2 heures (manuel)
+- **Installation modulaire**: 15-20 minutes au total
+- **Flexibilité**: Installez uniquement ce dont vous avez besoin
 - **Production-ready**: 95% après configuration
 - **Support technique**: Voir les logs ou scripts de diagnostics
-- **Documentation en ligne**: https://sfrayan.github.io/SAE501
-- **CI/CD**: Automatique avec GitHub Actions
-- **Guide sécurité complet**: `docs/HARDENING_GUIDE.md` ⭐ NOUVEAU
+- **Guide sécurité complet**: `docs/HARDENING_GUIDE.md`
 
 ---
 
 ## 🚀 Prêt?
 
 ```bash
-# Commencer l'installation:
-sudo bash scripts/install_all.sh
+# Commencer l'installation modulaire:
+sudo bash scripts/install_mysql.sh
+sudo bash scripts/install_radius.sh
+sudo bash scripts/install_php_admin.sh
 
-# Puis lancer tests sécurité:
-sudo bash scripts/test_security.sh
+# Optionnel - Monitoring:
+sudo bash scripts/install_wazuh.sh
 
-# Consulter les accès:
-bash scripts/show_credentials.sh
+# Recommandé - Sécurité:
+sudo bash scripts/install_hardening.sh
 
-# Et accéder à l'interface:
+# Vérifier l'installation:
+bash scripts/diagnostics.sh
+
+# Accéder à l'interface:
 http://VOTRE_IP/admin
 
-# Ou consulter la doc en ligne:
-https://sfrayan.github.io/SAE501
-
-# Ou lire le guide de sécurité:
+# Lire le guide de sécurité:
 cat docs/HARDENING_GUIDE.md
 ```
 
@@ -680,5 +581,5 @@ cat docs/HARDENING_GUIDE.md
 ---
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*
-*Dernière mise à jour: 25 janvier 2026*
-*Version: 2.0 - Avec hardening sécurité complet*
+*Dernière mise à jour: 31 janvier 2026*
+*Version: 2.1 - Installation modulaire*
