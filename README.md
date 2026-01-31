@@ -3,11 +3,11 @@
 ## 🌟 But du projet
 
 Créer une **infrastructure d'authentification RADIUS centralisée** pour une chaîne de salles de sport permettant:
-- 🐫 Authentification WPA-Enterprise sécurisée (PEAP-MSCHAPv2)
-- 👎 Gestion centralisée des utilisateurs
+- 📡 Authentification WPA-Enterprise sécurisée (PEAP-MSCHAPv2)
+- 👥 Gestion centralisée des utilisateurs
 - 📊 Monitoring et détection d'anomalies
 - 🔐 Logs d'audit complets
-- 🏐 **Installation 100% autonome - ZÉRO fichier externe requis**
+- 🚀 **Installation 100% autonome - ZÉRO fichier externe requis**
 - 🛡️ **Hardening sécurité complet automatisé**
 - ✨ Toutes configurations générées automatiquement
 
@@ -107,7 +107,7 @@ chmod +x scripts/*.sh tests/*.sh
 
 ## **ÉTAPE 3: Installation modulaire (RECOMMANDÉ)**
 
-### 💉 Installation par étapes - Exécuter dans l'ordre
+### 📦 Installation par étapes - Exécuter dans l'ordre
 
 ```bash
 # 1. Installer MySQL et créer la base de données
@@ -537,11 +537,11 @@ Après exécution de `install_hardening.sh`, le système bénéficie de:
 ```
 SAE501/
 ├── scripts/                    # Scripts d'installation
-│   ├── install_mysql.sh        🎶 Base de données
-│   ├── install_radius.sh       🎶 Serveur RADIUS (100% AUTONOME)
-│   ├── install_php_admin.sh    🎶 Interface web (100% AUTONOME) 🆕
-│   ├── install_wazuh.sh        🎶 Monitoring (100% AUTONOME)
-│   ├── install_hardening.sh    🎶 Sécurité (100% AUTONOME) ⭐🆕
+│   ├── install_mysql.sh        ⚙️ Base de données
+│   ├── install_radius.sh       ⚙️ Serveur RADIUS (100% AUTONOME)
+│   ├── install_php_admin.sh    ⚙️ Interface web (100% AUTONOME) 🆕
+│   ├── install_wazuh.sh        ⚙️ Monitoring (100% AUTONOME)
+│   ├── install_hardening.sh    ⚙️ Sécurité (100% AUTONOME) ⭐🆕
 │   ├── generate_certificates.sh
 │   └── diagnostics.sh
 │
