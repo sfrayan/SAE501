@@ -369,7 +369,7 @@ DEFAULT_SITE_EOF
 }
 
 configure_inner_tunnel_site() {
-    log_msg "🔐 Configuring inner-tunnel site..."
+    log_msg "🔒 Configuring inner-tunnel site..."
     
     cat > /etc/freeradius/3.0/sites-enabled/inner-tunnel << 'INNER_TUNNEL_EOF'
 server inner-tunnel {
@@ -408,7 +408,7 @@ INNER_TUNNEL_EOF
 }
 
 # ============================================================================
-# DÉPLOIEMENT CLIENTS.CONF DEPUIS LE REPO + GARANTIE LOCALHOST
+# DÉPLOIEMENT CLIENTS.CONF - CRITIQUE: VÉRIFIER CONTENU
 # ============================================================================
 
 deploy_clients_conf() {
@@ -455,8 +455,10 @@ CLIENTS_EOF
         chown freerad:freerad /etc/freeradius/3.0/clients.conf
         log_msg "✓ clients.conf created with localhost client"
     else
-        # Vérifier si localhost existe déjà
-        if ! grep -q "client localhost" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
+        # VÉRIFIER ET CORRIGER configuration localhost existante
+        log_msg "🔍 Vérification configuration localhost..."
+        
+        if ! grep -q "^client localhost" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
             log_msg "⚠️  Client localhost manquant, ajout automatique..."
             
             cat >> /etc/freeradius/3.0/clients.conf << 'LOCALHOST_EOF'
@@ -473,7 +475,34 @@ LOCALHOST_EOF
             
             log_msg "✓ Client localhost ajouté au clients.conf existant"
         else
-            log_msg "✓ Client localhost déjà présent dans clients.conf"
+            log_msg "🔍 Vérification contenu client localhost..."
+            
+            # Vérifier que secret = testing123
+            if grep -A 6 "^client localhost" /etc/freeradius/3.0/clients.conf | grep -q "secret = testing123"; then
+                log_msg "✓ Client localhost configuré correctement"
+            else
+                log_msg "⚠️  Client localhost mal configuré, correction..."
+                
+                # Sauvegarder et reconstruire
+                cp /etc/freeradius/3.0/clients.conf /etc/freeradius/3.0/clients.conf.bak
+                
+                # Supprimer l'ancienne définition et ajouter la bonne
+                sed -i '/^client localhost/,/^}/d' /etc/freeradius/3.0/clients.conf
+                
+                cat >> /etc/freeradius/3.0/clients.conf << 'LOCALHOST_FIXED_EOF'
+
+# SAE501 - Local testing client (FIXED)
+client localhost {
+    ipaddr = 127.0.0.1
+    ipv6addr = ::1
+    secret = testing123
+    shortname = localhost
+    nastype = other
+}
+LOCALHOST_FIXED_EOF
+                
+                log_msg "✓ Client localhost corrigé"
+            fi
         fi
     fi
 }
