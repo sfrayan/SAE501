@@ -1,26 +1,65 @@
 #!/bin/bash
 # ============================================================================
-# SAE501 - Installation PHP-Admin (100% AUTONOME)
+# SAE501 - Installation PHP-Admin (100% AUTONOME) - VERSION CORRIGÉE
 # ============================================================================
 # Script d'installation COMPLET de l'interface web PHP sans fichiers externes
 # Toutes les pages générées automatiquement durant l'installation
 # USAGE: sudo bash scripts/install_php_admin.sh
+#
+# CORRECTIONS APPLIQUÉES:
+# - ✅ Chargement des vrais credentials MySQL depuis /opt/sae501/secrets/db.env
+# - ✅ Support Debian 11 (PHP 7.4) et Debian 12 (PHP 8.x)
+# - ✅ Vérification de l'existence de db.env avant génération
 # ============================================================================
 
 set -euo pipefail
 LOG_FILE="/var/log/sae501_php_admin_install.log"
+SECRETS_DIR="/opt/sae501/secrets"
+DB_ENV_FILE="$SECRETS_DIR/db.env"
 
 log_msg() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" | tee -a "$LOG_FILE"; }
 check_root() { if [[ $EUID -ne 0 ]]; then echo "❌ Must run as root" >&2; exit 1; fi; }
 
+check_mysql_credentials() {
+    log_msg "🔍 Checking MySQL credentials..."
+    if [[ ! -f "$DB_ENV_FILE" ]]; then
+        log_msg "❌ ERROR: $DB_ENV_FILE not found!"
+        log_msg "Please run install_mysql.sh first."
+        exit 1
+    fi
+    log_msg "✓ db.env found"
+}
+
 install_apache_php() {
     log_msg "📦 Installing Apache2 and PHP..."
+    
+    # Détecter version Debian
+    local debian_version=$(cat /etc/debian_version 2>/dev/null | cut -d. -f1 || echo "unknown")
+    log_msg "Debian version detected: $debian_version"
+    
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y apache2 php php-mysql php-cli php-json php-curl php-mbstring libapache2-mod-php >/dev/null 2>&1
-    a2enmod php* rewrite ssl >/dev/null 2>&1 || true
+    
+    # Installation selon version Debian
+    if [[ "$debian_version" == "11" ]]; then
+        log_msg "Installing PHP 7.4 for Debian 11..."
+        apt-get install -y apache2 \
+            php7.4 php7.4-fpm php7.4-mysql php7.4-cli \
+            php7.4-json php7.4-curl php7.4-mbstring \
+            libapache2-mod-php7.4 >/dev/null 2>&1
+        a2enmod php7.4 rewrite ssl >/dev/null 2>&1 || true
+    else
+        log_msg "Installing PHP 8+ for Debian 12+..."
+        apt-get install -y apache2 php php-fpm php-mysql php-cli \
+            php-json php-curl php-mbstring libapache2-mod-php >/dev/null 2>&1
+        a2enmod php* rewrite ssl >/dev/null 2>&1 || true
+    fi
+    
     systemctl enable apache2 >/dev/null 2>&1
     systemctl restart apache2
     systemctl is-active --quiet apache2 && log_msg "✓ Apache2 and PHP installed" || { log_msg "❌ Apache2 failed"; exit 1; }
+    
+    local php_version=$(php -v 2>/dev/null | head -1 || echo "Unknown")
+    log_msg "PHP version: $php_version"
 }
 
 create_structure() {
@@ -31,29 +70,50 @@ create_structure() {
 }
 
 generate_config() {
-    log_msg "⚙️ Generating config.php..."
-    cat > /var/www/html/admin/config.php << 'EOFCONFIG'
+    log_msg "⚙️ Generating config.php with REAL credentials..."
+    
+    # Charger les credentials depuis db.env
+    source "$DB_ENV_FILE"
+    
+    # Support pour les anciens et nouveaux noms de variables
+    if [[ -n "${DB_USER_RADIUS:-}" && -n "${DB_PASSWORD_RADIUS:-}" ]]; then
+        MYSQL_RADIUS_USER="$DB_USER_RADIUS"
+        MYSQL_RADIUS_PASS="$DB_PASSWORD_RADIUS"
+    fi
+    
+    if [[ -z "${MYSQL_RADIUS_USER:-}" || -z "${MYSQL_RADIUS_PASS:-}" ]]; then
+        log_msg "❌ ERROR: MySQL credentials not found in $DB_ENV_FILE"
+        exit 1
+    fi
+    
+    log_msg "Using MySQL user: $MYSQL_RADIUS_USER"
+    
+    # Générer config.php avec les vrais credentials
+    cat > /var/www/html/admin/config.php << EOFCONFIG
 <?php
 // ============================================================================
-// SAE501 - Configuration PHP-Admin (AUTO-GÉNÉRÉ)
+// SAE501 - Configuration PHP-Admin (AUTO-GÉNÉRÉ avec VRAIS CREDENTIALS)
 // ============================================================================
 define('DB_HOST', 'localhost');
 define('DB_PORT', 3306);
 define('DB_NAME', 'radius');
-define('DB_USER', 'radiususer');
-define('DB_PASSWORD', 'RadiusApp@Secure123!');
+
+// ✅ CREDENTIALS CHARGÉS DEPUIS /opt/sae501/secrets/db.env
+define('DB_USER', '$MYSQL_RADIUS_USER');
+define('DB_PASSWORD', '$MYSQL_RADIUS_PASS');
+
 define('ADMIN_USER', 'admin');
 define('ADMIN_PASS', password_hash('Admin@Secure123!', PASSWORD_BCRYPT));
-define('APP_VERSION', '2.1.0');
+define('APP_VERSION', '2.2.0');
 define('APP_NAME', 'SAE501 RADIUS Admin');
 
-$pdo = null;
+\$pdo = null;
 
 function getDB() {
-    global $pdo;
-    if ($pdo === null) {
+    global \$pdo;
+    if (\$pdo === null) {
         try {
-            $pdo = new PDO(
+            \$pdo = new PDO(
                 'mysql:host='.DB_HOST.';port='.DB_PORT.';dbname='.DB_NAME.';charset=utf8mb4',
                 DB_USER,
                 DB_PASSWORD,
@@ -63,42 +123,43 @@ function getDB() {
                     PDO::ATTR_EMULATE_PREPARES => false
                 ]
             );
-        } catch (PDOException $e) {
-            die('<div style="background:#f56565;color:white;padding:20px;border-radius:10px;margin:20px;"><h2>❌ Erreur DB</h2><p>'.htmlspecialchars($e->getMessage()).'</p></div>');
+        } catch (PDOException \$e) {
+            die('<div style="background:#f56565;color:white;padding:20px;border-radius:10px;margin:20px;"><h2>❌ Erreur DB</h2><p>'.htmlspecialchars(\$e->getMessage()).'</p></div>');
         }
     }
-    return $pdo;
+    return \$pdo;
 }
 
-function logAudit($action, $target=null, $details=null) {
+function logAudit(\$action, \$target=null, \$details=null) {
     try {
-        $db = getDB();
-        $stmt = $db->prepare("INSERT INTO admin_audit (admin_user, action, target_user, details, ip_address, timestamp) VALUES (?, ?, ?, ?, ?, NOW())");
-        $stmt->execute([
-            $_SESSION['admin_user'] ?? 'system',
-            $action,
-            $target,
-            $details,
-            $_SERVER['REMOTE_ADDR'] ?? 'unknown'
+        \$db = getDB();
+        \$stmt = \$db->prepare("INSERT INTO admin_audit (admin_user, action, target_user, details, ip_address, timestamp) VALUES (?, ?, ?, ?, ?, NOW())");
+        \$stmt->execute([
+            \$_SESSION['admin_user'] ?? 'system',
+            \$action,
+            \$target,
+            \$details,
+            \$_SERVER['REMOTE_ADDR'] ?? 'unknown'
         ]);
-    } catch (Exception $e) {
-        error_log("Audit failed: ".$e->getMessage());
+    } catch (Exception \$e) {
+        error_log("Audit failed: ".\$e->getMessage());
     }
 }
 
-function cleanInput($input) {
-    return htmlspecialchars(trim($input), ENT_QUOTES, 'UTF-8');
+function cleanInput(\$input) {
+    return htmlspecialchars(trim(\$input), ENT_QUOTES, 'UTF-8');
 }
 
-function userExists($username) {
-    $db = getDB();
-    $stmt = $db->prepare("SELECT COUNT(*) FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password'");
-    $stmt->execute([$username]);
-    return $stmt->fetchColumn() > 0;
+function userExists(\$username) {
+    \$db = getDB();
+    \$stmt = \$db->prepare("SELECT COUNT(*) FROM radcheck WHERE username = ? AND attribute = 'Cleartext-Password'");
+    \$stmt->execute([\$username]);
+    return \$stmt->fetchColumn() > 0;
 }
 ?>
 EOFCONFIG
-    log_msg "✓ config.php generated"
+    
+    log_msg "✓ config.php generated with REAL MySQL credentials"
 }
 
 generate_index() {
@@ -455,7 +516,7 @@ set_permissions() {
     log_msg "🔐 Setting permissions..."
     chown -R www-data:www-data /var/www/html/admin
     chmod -R 755 /var/www/html/admin
-    chmod -R 775 /var/www/html/admin/logs
+    chmod -R 775 /var/www/html/admin/logs 2>/dev/null || true
     chmod 640 /var/www/html/admin/config.php
     log_msg "✓ Permissions configured"
 }
@@ -483,6 +544,14 @@ final_check() {
     log_msg "✅ Final checks..."
     systemctl is-active --quiet apache2 && log_msg "✓ Apache2: RUNNING" || { log_msg "❌ Apache2: NOT RUNNING"; return 1; }
     [[ -f "/var/www/html/admin/index.php" ]] && log_msg "✓ Files: OK" || { log_msg "❌ Files: MISSING"; return 1; }
+    
+    # Test connexion MySQL
+    if php -r "new PDO('mysql:host=localhost;dbname=radius', '$(source $DB_ENV_FILE && echo ${MYSQL_RADIUS_USER:-${DB_USER_RADIUS}})','$(source $DB_ENV_FILE && echo ${MYSQL_RADIUS_PASS:-${DB_PASSWORD_RADIUS}})');" 2>/dev/null; then
+        log_msg "✓ MySQL connection: OK"
+    else
+        log_msg "⚠️  MySQL connection test failed (check manually)"
+    fi
+    
     log_msg "✅ All checks passed!"
     return 0
 }
@@ -490,8 +559,11 @@ final_check() {
 main() {
     log_msg "=========================================="
     log_msg "SAE501 - PHP-Admin Installation Start"
+    log_msg "VERSION: 2.2.0 (FIXED CREDENTIALS)"
     log_msg "=========================================="
+    
     check_root
+    check_mysql_credentials
     install_apache_php
     create_structure
     generate_config
@@ -504,6 +576,7 @@ main() {
     generate_logout
     set_permissions
     configure_apache
+    
     if final_check; then
         echo ""
         log_msg "=========================================="
@@ -513,6 +586,9 @@ main() {
         log_msg "👤 User: admin | 🔑 Pass: Admin@Secure123!"
         log_msg "⚠️ CHANGE PASSWORD AFTER LOGIN!"
         log_msg ""
+        log_msg "📋 MySQL Credentials loaded from:"
+        log_msg "   $DB_ENV_FILE"
+        log_msg "=========================================="
     else
         log_msg "❌ Installation errors. Check logs."
         exit 1
