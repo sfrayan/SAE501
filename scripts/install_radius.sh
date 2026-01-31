@@ -262,6 +262,61 @@ EAP_CONF_EOF
 }
 
 # ============================================================================
+# ACTIVER MODULES DE BASE
+# ============================================================================
+
+enable_base_modules() {
+    log_msg "📦 Enabling base modules..."
+    
+    # Créer des symlinks vers les modules standards si disponibles
+    local MODS_AVAILABLE="/usr/share/freeradius/mods-available"
+    
+    if [[ -d "$MODS_AVAILABLE" ]]; then
+        for mod in preprocess files detail always; do
+            if [[ -f "$MODS_AVAILABLE/$mod" ]] && [[ ! -f "/etc/freeradius/3.0/mods-enabled/$mod" ]]; then
+                ln -sf "$MODS_AVAILABLE/$mod" "/etc/freeradius/3.0/mods-enabled/$mod" 2>/dev/null || true
+            fi
+        done
+    fi
+    
+    # Créer module preprocess si nécessaire
+    if [[ ! -f /etc/freeradius/3.0/mods-enabled/preprocess ]]; then
+        cat > /etc/freeradius/3.0/mods-enabled/preprocess << 'PREPROCESS_EOF'
+preprocess {
+    huntgroups = ${confdir}/mods-config/preprocess/huntgroups
+    hints = ${confdir}/mods-config/preprocess/hints
+    with_ascend_hack = no
+    ascend_channels_per_line = 23
+    with_ntdomain_hack = no
+    with_specialix_jetstream_hack = no
+    with_cisco_vsa_hack = no
+    with_alvarion_vsa_hack = no
+}
+PREPROCESS_EOF
+    fi
+    
+    # Créer module files si nécessaire  
+    if [[ ! -f /etc/freeradius/3.0/mods-enabled/files ]]; then
+        cat > /etc/freeradius/3.0/mods-enabled/files << 'FILES_EOF'
+files {
+    filename = ${confdir}/mods-config/files/authorize
+    acctusersfile = ${confdir}/mods-config/files/accounting
+    preproxy_usersfile = ${confdir}/mods-config/files/pre-proxy
+}
+FILES_EOF
+    fi
+    
+    # Créer les répertoires de config pour les modules
+    mkdir -p /etc/freeradius/3.0/mods-config/{preprocess,files}
+    touch /etc/freeradius/3.0/mods-config/preprocess/{huntgroups,hints}
+    touch /etc/freeradius/3.0/mods-config/files/{authorize,accounting,pre-proxy}
+    
+    chown -R freerad:freerad /etc/freeradius/3.0/mods-config
+    
+    log_msg "✓ Base modules enabled"
+}
+
+# ============================================================================
 # CONFIGURATION DES SITES (DEFAULT + INNER-TUNNEL)
 # ============================================================================
 
@@ -283,7 +338,6 @@ server default {
     }
     
     authorize {
-        filter_username
         preprocess
         sql
         eap {
@@ -326,7 +380,6 @@ server inner-tunnel {
     }
     
     authorize {
-        filter_username
         sql
         mschap
         eap {
@@ -460,7 +513,14 @@ security {
 proxy_requests = no
 
 $INCLUDE clients.conf
-$INCLUDE mods-enabled/
+
+modules {
+    $INCLUDE mods-enabled/
+}
+
+instantiate {
+}
+
 $INCLUDE sites-enabled/
 RADIUSD_CONF_EOF
     
@@ -483,7 +543,6 @@ mschap {
     require_encryption = yes
     require_strong = yes
     with_ntdomain_hack = no
-    ntlm_auth = "/usr/bin/ntlm_auth --request-nt-key --username=%{%{Stripped-User-Name}:-%{User-Name}} --challenge=%{%{mschap:Challenge}:-00} --nt-response=%{%{mschap:NT-Response}:-00}"
 }
 MSCHAP_EOF
     
@@ -603,6 +662,7 @@ main() {
     configure_sql_module
     configure_eap_module
     enable_mschap_module
+    enable_base_modules
     
     configure_default_site
     configure_inner_tunnel_site
