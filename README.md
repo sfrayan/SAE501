@@ -3,13 +3,13 @@
 ## 🌟 But du projet
 
 Créer une **infrastructure d'authentification RADIUS centralisée** pour une chaîne de salles de sport permettant:
-- 💫 Authentification WPA-Enterprise sécurisée (PEAP-MSCHAPv2)
+- 🐫 Authentification WPA-Enterprise sécurisée (PEAP-MSCHAPv2)
 - 👎 Gestion centralisée des utilisateurs
 - 📊 Monitoring et détection d'anomalies
 - 🔐 Logs d'audit complets
-- 🎐 Installation modulaire et personnalisable
-- 🛡️ **Hardening sécurité complet**
-- ✨ **Toutes configurations générées automatiquement**
+- 🎐 **Installation 100% autonome - ZÉRO fichier externe requis**
+- 🛡️ Hardening sécurité complet
+- ✨ Toutes configurations générées automatiquement
 
 ---
 
@@ -21,15 +21,17 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 - Base de données utilisateurs: MySQL
 - ✨ **Configuration 100% automatique** - aucun fichier externe requis
 
-### **PHP-Admin** (Port 80/443)
-- Interface web de gestion
-- Ajouter/modifier/supprimer utilisateurs
-- Logs d'audit complets
-- Paramétrages système
+### **PHP-Admin** (Port 80/443) 🆕
+- ✨ **100% AUTO-GÉNÉRÉ - ZÉRO DÉPENDANCE**
+- Interface web responsive moderne
+- Toutes les pages PHP créées durant l'installation
+- Gestion complète des utilisateurs RADIUS
+- Logs d'audit détaillés
+- Dashboard avec statistiques en temps réel
 
 ### **MySQL/MariaDB** (Port 3306)
 - Base de données RADIUS
-- Stockage utilisateurs (mots de passe hashés)
+- Stockage utilisateurs (mots de passe chiffrés)
 - Logs d'authentification
 
 ### **Wazuh** (Port 5601/1514)
@@ -60,7 +62,7 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 ### 1.1 Créer une VM
 - VirtualBox ou Proxmox
 - Debian 12 ou Ubuntu 22.04
-- Allocer **8GB RAM** (4GB minimum), 2 CPU, 50GB disque
+- Allouer **8GB RAM** (4GB minimum), 2 CPU, 50GB disque
 
 ### 1.2 Installer Debian/Ubuntu
 ```bash
@@ -111,7 +113,13 @@ sudo bash scripts/install_mysql.sh
 #    - Test d'authentification
 sudo bash scripts/install_radius.sh
 
-# 3. Installer PHP-Admin (interface web)
+# 3. Installer PHP-Admin (interface web) 🆕
+# ✨ GÉNÈRE AUTOMATIQUEMENT:
+#    - Toutes les pages PHP (login, dashboard, users, audit, system)
+#    - Configuration Apache complète
+#    - Permissions sécurisées
+#    - Design moderne responsive
+#    - ZÉRO fichier externe requis!
 sudo bash scripts/install_php_admin.sh
 
 # 4. Installer Wazuh (monitoring) - OPTIONNEL
@@ -134,15 +142,16 @@ sudo bash scripts/install_hardening.sh
 - **Sans Wazuh**: 10-15 minutes
 - **Avec Wazuh**: 20-30 minutes (installation complète + Dashboard)
 
-**✨ Nouveautés du script Wazuh**:
-- ✅ **Zéro dépendance** aux fichiers de configuration externes
-- ✅ Génération automatique d'ossec.conf complet (monitoring RADIUS, MySQL, Apache, système)
-- ✅ Création automatique de 10 règles d'alerte personnalisées pour RADIUS
-- ✅ Installation OpenSearch + Filebeat + Dashboard en un seul script
-- ✅ Configuration automatique de la collecte syslog (port 514 UDP)
-- ✅ Détection de rootkits et File Integrity Monitoring activés
-- ✅ Dashboard web accessible sur `http://IP:5601`
-- ✅ Logs détaillés dans `/var/log/sae501_wazuh_install.log`
+**✨ Nouveautés PHP-Admin**:
+- ✅ **Zéro dépendance** aux fichiers PHP externes
+- ✅ Génération automatique de toutes les pages durant l'installation
+- ✅ Interface moderne avec dégradés
+- ✅ Dashboard avec statistiques en temps réel
+- ✅ Gestion utilisateurs (CRUD complet)
+- ✅ Logs d'audit détaillés
+- ✅ Paramètres système
+- ✅ Responsive mobile-friendly
+- ✅ Installation en moins de 2 minutes
 
 **Avantages de l'installation modulaire**:
 - ✅ Contrôle total sur chaque composant
@@ -170,14 +179,7 @@ Vous devriez voir:
 - ✓ Filebeat ACTIF (si installé)
 - ✓ Wazuh Dashboard ACTIF (si installé)
 
-### 4.2 Vérifier les accès
-```bash
-bash scripts/diagnostics.sh
-```
-
-Notez les identifiants affichés!
-
-### 4.3 Tester l'authentification RADIUS
+### 4.2 Tester l'authentification RADIUS
 
 ```bash
 # Test avec l'utilisateur créé automatiquement
@@ -187,21 +189,43 @@ radtest testuser testpass localhost 0 testing123
 # Received Access-Accept
 ```
 
+### 4.3 Accéder à PHP-Admin 🆕
+
+```
+URL: http://VOTRE_IP/admin
+Utilisateur: admin
+Mot de passe: Admin@Secure123!
+```
+
+**Fonctionnalités disponibles**:
+- 🏠 **Tableau de bord**: Statistiques en temps réel
+- 👥 **Utilisateurs**: Liste complète avec actions
+- ➕ **Ajouter**: Création rapide d'utilisateurs
+- 📄 **Logs**: Audit détaillé des actions
+- ⚙️ **Système**: Informations et diagnostics
+
 ---
 
 ## **ÉTAPE 5: Configuration Sécurité Avancée (RECOMMANDÉ) ⭐**
 
-### 5.1 Générer des certificats SSL valides (PRODUCTION)
+### 5.1 CHANGER LES MOTS DE PASSE (⚠️ OBLIGATOIRE!)
 
 ```bash
-# Pour la production (Let's Encrypt)
-sudo apt-get install -y certbot python3-certbot-apache
-sudo certbot certonly --apache -d VOTRE_DOMAINE.com
+# 1. Changer le mot de passe PHP-Admin:
+# Connectez-vous à http://VOTRE_IP/admin
+# Allez dans Paramètres > Changer mot de passe
 
-# Remplacer les certificats auto-signés
-sudo ln -sf /etc/letsencrypt/live/VOTRE_DOMAINE.com/fullchain.pem /etc/freeradius/3.0/certs/server.pem
-sudo ln -sf /etc/letsencrypt/live/VOTRE_DOMAINE.com/privkey.pem /etc/freeradius/3.0/certs/server.key
+# 2. Changer le secret RADIUS dans clients.conf:
+sudo nano /etc/freeradius/3.0/clients.conf
+# Remplacez: secret = testing123
+# Par: secret = VotreSecret@TrèsSécurisé123!
 sudo systemctl restart freeradius
+
+# 3. Changer MySQL root:
+mysql -u root -p
+# Enter: MySQL@Root123!
+ALTER USER 'root'@'localhost' IDENTIFIED BY 'NouveauMot@Passe123!';
+EXIT;
 ```
 
 ### 5.2 Vérifier le hardening appliqué
@@ -220,79 +244,11 @@ mysql -u root -p -e "SELECT User, Host FROM mysql.user;"
 sudo fail2ban-client status
 ```
 
-### 5.3 Consulter le guide complet
-
-```bash
-# Voir le guide de sécurité détaillé
-cat docs/HARDENING_GUIDE.md
-```
-
 ---
 
-## **ÉTAPE 6: Premières configurations**
+## **ÉTAPE 6: Configurer le routeur Wi-Fi**
 
-### 6.1 Accéder à PHP-Admin
-
-```
-URL: http://VOTRE_IP/admin
-Utilisateur: admin
-Mot de passe: Admin@Secure123! (affiché en fin d'install)
-```
-
-**Dès le premier accès**:
-1. Allez dans "Paramétrages"
-2. Changez le mot de passe admin
-3. Configurez le secret RADIUS
-4. Configurez l'IP du routeur NAS
-
-### 6.2 Accéder au Wazuh Dashboard (si installé) 🆕
-
-```
-URL: http://VOTRE_IP:5601
-Utilisateur: admin
-Mot de passe: Admin@Wazuh123!
-```
-
-**⚠️ CHANGEZ IMMÉDIATEMENT LE MOT DE PASSE!**
-
-**Explorez le dashboard**:
-- 📊 **Vue d'ensemble**: Statistiques en temps réel
-- 💱 **Sécurité Events**: Alertes de sécurité classées par sévérité
-- 🚀 **Integrity Monitoring**: Surveillance des modifications de fichiers
-- 🔍 **Vulnerability Detection**: Scan de vulnérabilités actif
-- 📄 **RADIUS Logs**: Authentifications réussies/échouées
-- 🚨 **Alertes personnalisées**:
-  - Tentatives multiples d'authentification (attaque brute-force)
-  - Erreurs de connexion MySQL
-  - Clients RADIUS non autorisés
-  - Certificats SSL expirés
-  - Et 6 autres règles spécifiques RADIUS
-
-### 6.3 CHANGER LES MOTS DE PASSE (⚠️ OBLIGATOIRE!)
-
-```bash
-# Afficher les mots de passe actuels
-bash scripts/diagnostics.sh
-
-# Changer dans PHP-Admin:
-# Admin: Admin@Secure123! → VotreMot@Passe123!
-
-# Changer dans Wazuh Dashboard:
-# Admin: Admin@Wazuh123! → VotreMot@Passe123!
-# 🚨 Modifier aussi dans /etc/wazuh-dashboard/opensearch_dashboards.yml
-
-# Changer MySQL root:
-mysql -u root -p
-# Enter: MySQL@Root123!
-ALTER USER 'root'@'localhost' IDENTIFIED BY 'NouveauMot@Passe123!';
-EXIT;
-```
-
----
-
-## **ÉTAPE 7: Configurer le routeur Wi-Fi**
-
-### 7.1 Accéder à l'interface du routeur
+### 6.1 Accéder à l'interface du routeur
 
 ```
 URL: http://192.168.1.1
@@ -300,7 +256,7 @@ Login: admin
 Password: admin (par défaut TP-Link)
 ```
 
-### 7.2 Configurer l'authentification Wi-Fi
+### 6.2 Configurer l'authentification Wi-Fi
 
 1. Allez dans **Wireless Settings** ou **Security**
 2. Sélectionnez le SSID d'entreprise
@@ -308,63 +264,52 @@ Password: admin (par défaut TP-Link)
 4. **Authentication Type**: PEAP ou EAP-TLS
 5. **RADIUS Server IP**: Adresse IP du serveur SAE501
 6. **RADIUS Server Port**: 1812
-7. **Shared Secret**: Celui configuré dans `radius/clients.conf` (par défaut: `testing123`)
+7. **Shared Secret**: `testing123` (ou votre secret modifié)
 8. **Cliquer Save**
 
-### 7.3 Tester la connexion
+### 6.3 Tester la connexion
 
 Sur un ordinateur:
 1. Chercher le réseau Wi-Fi
 2. Connecter à l'SSID "Entreprise"
 3. Type d'authentification: WPA-Enterprise
-4. Entrer un identifiant RADIUS créé en PHP-Admin (ou `testuser`)
-5. Entrer le mot de passe (ou `testpass`)
+4. Entrer un identifiant RADIUS créé en PHP-Admin
+5. Entrer le mot de passe
 6. Vérifier dans les logs: `sudo tail -f /var/log/freeradius/radius.log`
-7. Vérifier dans Wazuh Dashboard: Voir l'alerte "Authentification réussie"
 
 ---
 
-## **ÉTAPE 8: Gestion des utilisateurs**
+## **ÉTAPE 7: Gestion des utilisateurs avec PHP-Admin**
 
-### 8.1 Ajouter un utilisateur
+### 7.1 Ajouter un utilisateur
 
-**Via PHP-Admin**:
+**Via PHP-Admin** (✅ **RECOMMANDÉ**):
 1. Accédez à `http://VOTRE_IP/admin`
-2. Cliquez "Ajouter utilisateur"
+2. Cliquez "➕ Ajouter utilisateur"
 3. Entrez:
    - Identifiant: `jean.dupont`
    - Mot de passe: `MonPasse@123`
-4. Cliquez "Énregistrer"
+4. Cliquez "✅ Ajouter"
 
-**Via CLI (optionnel)**:
-```bash
-mysql -u radiusapp -p radius
-# Mot de passe: RadiusApp@Secure123!
+**Avantages PHP-Admin**:
+- ✅ Interface graphique intuitive
+- ✅ Validation des champs
+- ✅ Logs d'audit automatiques
+- ✅ Aucune commande SQL manuelle
 
-INSERT INTO radcheck (username, attribute, op, value) 
-VALUES ('jean.dupont', 'Cleartext-Password', ':=', 'MonPasse@123');
-
-EXIT;
-```
-
-### 8.2 Lister les utilisateurs
+### 7.2 Lister les utilisateurs
 
 **Via PHP-Admin**:
-1. Cliquez "Lister utilisateurs"
+1. Cliquez "👥 Utilisateurs"
 2. Voir tous les comptes créés
-3. Actions: modifier, supprimer, activer/désactiver
+3. Actions: ✏️ Modifier, 🗑️ Supprimer
 
-### 8.3 Consulter les logs d'authentification
+### 7.3 Consulter les logs d'authentification
 
 **Via PHP-Admin**:
-1. Cliquez "Logs d'audit"
+1. Cliquez "📄 Logs d'audit"
 2. Filtrez par date/action
 3. Voir qui s'est connecté, quand, d'où, résultat
-
-**Via Wazuh Dashboard**:
-1. Onglet "RADIUS Logs"
-2. Voir authentications en temps réel
-3. Filtrer par utilisateur, IP, résultat
 
 **Logs en temps réel**:
 ```bash
@@ -373,39 +318,23 @@ sudo tail -f /var/log/freeradius/radius.log
 
 ---
 
-## **ÉTAPE 9: Monitoring et sécurité avec Wazuh 🆕**
+## **ÉTAPE 8: Monitoring avec Wazuh Dashboard 🆕**
 
-### 9.1 Dashboard Wazuh - Vue d'ensemble
+### 8.1 Accéder au Dashboard Wazuh
 
-**Accéder au dashboard**:
 ```
 URL: http://VOTRE_IP:5601
-User: admin
-Pass: Admin@Wazuh123!  (CHANGEZ-LE!)
+Utilisateur: admin
+Mot de passe: Admin@Wazuh123!  (CHANGEZ-LE!)
 ```
 
 **Sections importantes**:
 1. **Overview** (🏠): Statistiques globales
-   - Nombre total d'alertes (24h/7j/30j)
-   - Top 10 des agents
-   - Distribution des alertes par niveau
-
 2. **Security Events** (🚨): Alertes de sécurité
-   - Niveau 3: Info (authentifications réussies)
-   - Niveau 5: Notice (échecs d'authentification)
-   - Niveau 10: Critical (attaques détectées)
-
 3. **Integrity Monitoring** (📄): Surveillance fichiers
-   - Modifications dans `/etc/freeradius`
-   - Modifications dans `/var/ossec`
-   - Alertes sur changements suspects
+4. **RADIUS Logs**: Authentifications réussies/échouées
 
-4. **Vulnerability Detection** (🔍): Scan de vulnérabilités
-   - CVE détectés sur le système
-   - Packages obsolètes
-   - Patches recommandés
-
-### 9.2 Règles d'alerte personnalisées RADIUS
+### 8.2 Règles d'alerte personnalisées RADIUS
 
 Le script Wazuh crée automatiquement **10 règles** spécifiques:
 
@@ -422,108 +351,29 @@ Le script Wazuh crée automatiquement **10 règles** spécifiques:
 | 100009 | Mot de passe incorrect | 5 (Notice) |
 | 100010 | Serveur RADIUS surchargé | 9 (Alert) |
 
-### 9.3 Utiliser les filtres avancés
-
-**Rechercher des authentifications échouées**:
-```
-rule.id:100002
-```
-
-**Rechercher des attaques potentielles**:
-```
-rule.id:100003
-```
-
-**Rechercher par utilisateur**:
-```
-data.srcuser:"jean.dupont"
-```
-
-**Rechercher par IP source**:
-```
-data.srcip:"192.168.1.100"
-```
-
-### 9.4 Créer des dashboards personnalisés
-
-1. Cliquez sur **Visualize** dans le menu
-2. Créez un graphique "Authentifications par heure"
-3. Ajoutez-le à un dashboard personnalisé
-4. Partagez le dashboard avec votre équipe
-
-### 9.5 Vérifier les infos système
-
-**Via PHP-Admin**:
-1. Cliquez "Infos système"
-2. Voir l'état des services
-3. Cliquer sur "Tester" pour diagnostics
-
-**Via Wazuh Dashboard**:
-1. Onglet "Agents"
-2. Cliquer sur l'agent local
-3. Voir CPU, RAM, disque en temps réel
-
-### 9.6 Dépannage Wazuh
-
-**Si quelque chose ne fonctionne pas**:
-```bash
-# Diagnostics détaillés Wazuh
-sudo systemctl status wazuh-manager
-sudo systemctl status opensearch
-sudo systemctl status filebeat
-sudo systemctl status wazuh-dashboard
-
-# Voir les logs d'installation Wazuh
-sudo tail -f /var/log/sae501_wazuh_install.log
-
-# Voir les logs Wazuh Manager
-sudo tail -f /var/ossec/logs/ossec.log
-
-# Voir les alertes en temps réel
-sudo tail -f /var/ossec/logs/alerts/alerts.log
-
-# Tester la connexion OpenSearch
-curl http://localhost:9200
-
-# Tester le dashboard
-curl http://localhost:5601
-
-# Rebooter les services
-sudo systemctl restart wazuh-manager
-sudo systemctl restart opensearch
-sudo systemctl restart filebeat
-sudo systemctl restart wazuh-dashboard
-```
-
 ---
 
-## **ÉTAPE 10: Sauvegarder et maintenir**
+## **ÉTAPE 9: Maintenance**
 
-### 10.1 Sauvegarder la base de données
+### 9.1 Sauvegarder la base de données
 
 ```bash
 # Sauvegarde complète
 mysqldump -u root -p radius > backup_radius_$(date +%Y%m%d).sql
 
-# Entrer le mot de passe MySQL root
-```
-
-### 10.2 Sauvegarder la configuration Wazuh
-
-```bash
 # Sauvegarder Wazuh
 tar -czf backup_wazuh_$(date +%Y%m%d).tar.gz /var/ossec/etc
 ```
 
-### 10.3 Restaurer une sauvegarde
+### 9.2 Restaurer une sauvegarde
 
 ```bash
 # Si problème, restaurer
-mysql -u root -p radius < backup_radius_20260123.sql
-tar -xzf backup_wazuh_20260123.tar.gz -C /
+mysql -u root -p radius < backup_radius_20260131.sql
+tar -xzf backup_wazuh_20260131.tar.gz -C /
 ```
 
-### 10.4 Maintenance régulière
+### 9.3 Maintenance régulière
 
 ```bash
 # Chaque semaine:
@@ -548,48 +398,11 @@ sudo journalctl -u wazuh-manager --since today
 
 **OBLIGATOIRE**:
 - [ ] Changez TOUS les mots de passe par défaut
-- [ ] Remplacez les certificats auto-signés par des certificats valides (Let's Encrypt)
+- [ ] Remplacez les certificats auto-signés par des certificats valides
 - [ ] Activez HTTPS partout
 - [ ] Configurez le firewall UFW
 - [ ] Testez les sauvegardes
-- [ ] Désactivez les accès inutiles
-- [ ] Changez le secret RADIUS `testing123` dans `radius/clients.conf`
-- [ ] Changez le mot de passe Wazuh Dashboard
-- [ ] Changez le mot de passe OpenSearch dans `/etc/wazuh-dashboard/opensearch_dashboards.yml`
-
-**FORTEMENT RECOMMANDÉ**:
-- [ ] Activez 2FA pour PHP-Admin
-- [ ] Limitez l'accès SSH (clés uniquement)
-- [ ] Configurez les alertes Wazuh par email
-- [ ] Mettez en place des backups automatiques
-- [ ] Utilisez un VPN pour administrer
-- [ ] Lisez le guide complet: `docs/HARDENING_GUIDE.md`
-
-### 📈 Bonnes pratiques
-
-```bash
-# 1. Firewall (UFW)
-sudo ufw enable
-sudo ufw allow 22/tcp      # SSH
-sudo ufw allow 80/tcp      # HTTP
-sudo ufw allow 443/tcp     # HTTPS
-sudo ufw allow 1812/udp    # RADIUS
-sudo ufw allow 5601/tcp    # Wazuh Dashboard
-sudo ufw allow 514/udp     # Wazuh Syslog
-sudo ufw allow 1514/tcp    # Wazuh Agent
-
-# 2. SSH sécurisé
-sudo nano /etc/ssh/sshd_config
-# Remplacer:
-# PermitRootLogin no
-# PasswordAuthentication no
-# PubkeyAuthentication yes
-
-# 3. Logs régulièrement audités
-sudo tail -f /var/log/auth.log
-sudo tail -f /var/log/syslog
-sudo tail -f /var/ossec/logs/alerts/alerts.log
-```
+- [ ] Changez le secret RADIUS `testing123`
 
 ---
 
@@ -598,11 +411,11 @@ sudo tail -f /var/ossec/logs/alerts/alerts.log
 ```
 SAE501/
 ├── scripts/                    # Scripts d'installation
-│   ├── install_mysql.sh        🎆 Base de données
-│   ├── install_radius.sh       🎆 Serveur RADIUS (100% AUTONOME)
-│   ├── install_php_admin.sh    🎆 Interface web
-│   ├── install_wazuh.sh        🎆 Monitoring COMPLET (100% AUTONOME)
-│   ├── install_hardening.sh    🎆 Sécurité (recommandé)
+│   ├── install_mysql.sh        🎶 Base de données
+│   ├── install_radius.sh       🎶 Serveur RADIUS (100% AUTONOME)
+│   ├── install_php_admin.sh    🎶 Interface web (100% AUTONOME) 🆕
+│   ├── install_wazuh.sh        🎶 Monitoring (100% AUTONOME)
+│   ├── install_hardening.sh    🎶 Sécurité (recommandé)
 │   ├── generate_certificates.sh
 │   └── diagnostics.sh
 │
@@ -612,30 +425,15 @@ SAE501/
 │       ├── create_tables.sql
 │       └── init_appuser.sql
 │
-├── php-admin/                  # Interface web
-│   ├── index.php
-│   ├── config.php
-│   ├── auth.php
-│   ├── functions.php
-│   └── pages/
-│       ├── dashboard.php
-│       ├── list_users.php
-│       ├── add_user.php
-│       ├── delete_user.php
-│       ├── audit.php
-│       ├── system.php
-│       └── settings.php
-│
 ├── docs/                       # Documentation
 │   ├── HARDENING_GUIDE.md
 │   ├── dossier-architecture.md
-│   ├── hardening-linux.md
 │   └── journal-de-bord.md
 │
 └── README.md                   # CE FICHIER
 
-NOTE: Le dossier wazuh/ a été SUPPRIMÉ car toutes les configurations
-sont maintenant générées automatiquement par le script install_wazuh.sh!
+NOTE: Aucun dossier php-admin/ ou wazuh/ nécessaire!
+Toutes les pages PHP et configurations sont générées automatiquement.
 ```
 
 ---
@@ -644,16 +442,11 @@ sont maintenant générées automatiquement par le script install_wazuh.sh!
 
 | Problème | Solution |
 |----------|----------|
-| Installation bloque | Vérifier connexion internet: `ping google.com` |
-| RADIUS ne démarre pas | `sudo systemctl status freeradius` ou `sudo freeradius -X` |
-| Configuration RADIUS échoue | Vérifier `/var/log/sae501_radius_install.log` |
 | PHP-Admin inaccessible | `sudo systemctl restart apache2 php-fpm` |
-| Wazuh ne répond pas | `sudo systemctl restart wazuh-manager opensearch filebeat wazuh-dashboard` |
-| Wazuh Dashboard HTTP 502 | `sudo systemctl status opensearch` - Vérifier RAM disponible |
-| Authentification échoue | Vérifier identifiant/mot de passe en PHP-Admin |
-| Connexion Wi-Fi échoue | Vérifier logs: `sudo tail -f /var/log/freeradius/radius.log` |
-| Certificats SSL invalides | Remplacer par Let's Encrypt (voir étape 5.1) |
-| OpenSearch ne démarre pas | Vérifier JVM: `sudo journalctl -u opensearch --since "5 minutes ago"` |
+| Pages PHP manquantes | Relancer: `sudo bash scripts/install_php_admin.sh` |
+| Erreur connexion DB | Vérifier MySQL: `sudo systemctl status mysql` |
+| RADIUS ne démarre pas | `sudo freeradius -X` pour debug |
+| Wazuh Dashboard HTTP 502 | Vérifier RAM: `free -h` - OpenSearch requiert 4GB+ |
 
 ---
 
@@ -663,8 +456,8 @@ sont maintenant générées automatiquement par le script install_wazuh.sh!
 # Installation modulaire (DANS L'ORDRE)
 sudo bash scripts/install_mysql.sh
 sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME
-sudo bash scripts/install_php_admin.sh
-sudo bash scripts/install_wazuh.sh        # ✨ 100% AUTONOME - Manager + Dashboard!
+sudo bash scripts/install_php_admin.sh    # ✨ 100% AUTONOME 🆕
+sudo bash scripts/install_wazuh.sh        # ✨ 100% AUTONOME
 sudo bash scripts/install_hardening.sh    # RECOMMANDÉ
 
 # Voir l'état du système
@@ -675,21 +468,21 @@ radtest testuser testpass localhost 0 testing123
 
 # Voir logs RADIUS
 sudo tail -f /var/log/freeradius/radius.log
-sudo tail -f /var/log/sae501_radius_install.log
 
-# Voir logs Wazuh
-sudo tail -f /var/ossec/logs/alerts/alerts.log
-sudo tail -f /var/log/sae501_wazuh_install.log
+# Accéder à PHP-Admin
+http://VOTRE_IP/admin
+User: admin | Pass: Admin@Secure123!
 
-# Mode debug complet RADIUS
+# Accéder au Wazuh Dashboard
+http://VOTRE_IP:5601
+User: admin | Pass: Admin@Wazuh123!
+
+# Mode debug RADIUS
 sudo freeradius -X
 
 # Rebooter services
-sudo systemctl restart freeradius mysql apache2 php-fpm
-sudo systemctl restart wazuh-manager opensearch filebeat wazuh-dashboard
-
-# Accéder MySQL
-mysql -u radiusapp -p radius
+sudo systemctl restart freeradius mysql apache2
+sudo systemctl restart wazuh-manager opensearch
 
 # Sauvegarde
 mysqldump -u root -p radius > backup.sql
@@ -700,23 +493,18 @@ tar -czf backup_wazuh.tar.gz /var/ossec/etc
 
 ## ✅ Checklist finale
 
-- [ ] VM créée (**8GB RAM recommandé** avec Wazuh, 2 CPU, 50GB disque)
+- [ ] VM créée (8GB RAM, 2 CPU, 50GB disque)
 - [ ] Debian/Ubuntu 22.04+ installé
 - [ ] Repository SAE501 cloné
-- [ ] Scripts individuels exécutés dans l'ordre
-- [ ] FreeRADIUS démarré et teste `testuser` fonctionne
+- [ ] Scripts exécutés dans l'ordre
+- [ ] FreeRADIUS démarré et test `testuser` fonctionne
+- [ ] **PHP-Admin accessible sur http://IP/admin** 🆕
 - [ ] Mots de passe changés
-- [ ] Secret RADIUS changé dans `radius/clients.conf`
-- [ ] Certificats SSL remplacés (production)
-- [ ] PHP-Admin accessible et fonctionnel
-- [ ] **Wazuh Dashboard accessible sur `http://IP:5601`**
-- [ ] **Mot de passe Wazuh changé (Admin@Wazuh123! → VotreMot@Passe123!)**
-- [ ] **Vérifié les 4 services Wazuh: Manager, OpenSearch, Filebeat, Dashboard**
+- [ ] Secret RADIUS changé
+- [ ] Wazuh Dashboard accessible (optionnel)
 - [ ] Routeur configuré (RADIUS Server, secret)
 - [ ] Utilisateur test créé en PHP-Admin
 - [ ] Connexion Wi-Fi testée et fonctionnelle
-- [ ] **Logs RADIUS visibles dans Wazuh Dashboard**
-- [ ] **Alertes personnalisées RADIUS fonctionnelles**
 - [ ] Logs d'audit consultés
 - [ ] Firewall UFW configuré
 - [ ] Sauvegardes planifiées
@@ -725,12 +513,12 @@ tar -czf backup_wazuh.tar.gz /var/ossec/etc
 
 ## 📄 Informations importantes
 
-- **Installation modulaire**: 20-30 minutes avec Wazuh complet
+- **Installation modulaire**: 10-30 minutes selon composants
 - **Flexibilité**: Installez uniquement ce dont vous avez besoin
 - **RADIUS 100% autonome**: Aucun fichier externe requis (sauf `clients.conf`)
-- **Wazuh 100% autonome**: Manager + Dashboard + OpenSearch en un seul script!
+- **PHP-Admin 100% autonome**: 🆕 Toutes pages générées durant installation
+- **Wazuh 100% autonome**: Manager + Dashboard en un seul script
 - **Production-ready**: 95% après configuration
-- **Support technique**: Voir les logs ou scripts de diagnostics
 - **Guide sécurité complet**: `docs/HARDENING_GUIDE.md`
 
 ---
@@ -740,11 +528,11 @@ tar -czf backup_wazuh.tar.gz /var/ossec/etc
 ```bash
 # Commencer l'installation modulaire:
 sudo bash scripts/install_mysql.sh
-sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME!
-sudo bash scripts/install_php_admin.sh
+sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME
+sudo bash scripts/install_php_admin.sh    # ✨ 100% AUTONOME 🆕
 
-# Optionnel - Monitoring COMPLET:
-sudo bash scripts/install_wazuh.sh       # ✨ Manager + Dashboard 100% AUTONOME!
+# Optionnel - Monitoring:
+sudo bash scripts/install_wazuh.sh       # ✨ 100% AUTONOME
 
 # Recommandé - Sécurité:
 sudo bash scripts/install_hardening.sh
@@ -752,19 +540,12 @@ sudo bash scripts/install_hardening.sh
 # Vérifier l'installation:
 bash scripts/diagnostics.sh
 
+# Accéder à PHP-Admin:
+http://VOTRE_IP/admin
+User: admin | Pass: Admin@Secure123!
+
 # Tester RADIUS:
 radtest testuser testpass localhost 0 testing123
-
-# Accéder à l'interface PHP:
-http://VOTRE_IP/admin
-
-# Accéder au Wazuh Dashboard:
-http://VOTRE_IP:5601
-User: admin
-Pass: Admin@Wazuh123!  (CHANGEZ-LE!)
-
-# Lire le guide de sécurité:
-cat docs/HARDENING_GUIDE.md
 ```
 
 **Bonne chance! Le système est prêt pour la production. ✅**
@@ -773,4 +554,4 @@ cat docs/HARDENING_GUIDE.md
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*
 *Dernière mise à jour: 31 janvier 2026*
-*Version: 3.0 - Installation RADIUS + Wazuh 100% autonome*
+*Version: 3.1 - PHP-Admin 100% autonome + RADIUS + Wazuh*
