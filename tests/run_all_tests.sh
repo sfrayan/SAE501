@@ -4,7 +4,7 @@
 #                  SAE501 - SUITE COMPLÈTE DE TESTS                        #
 #     Validation automatique de l'installation et de la sécurité          #
 #                     Author: SAE501 Security Team                         #
-#                          Version: 3.0                                    #
+#                          Version: 3.1                                    #
 #############################################################################
 
 set -euo pipefail
@@ -193,6 +193,22 @@ else
     test_fail "MySQL non installé"
 fi
 
+subsection "Configuration réseau MySQL (CRITIQUE)"
+
+if command -v mysql &> /dev/null; then
+    BIND_CHECK=$(mysql -u root -e "SHOW VARIABLES LIKE 'bind_address';" 2>/dev/null | grep bind_address | awk '{print $2}' || echo "N/A")
+    
+    if [ "$BIND_CHECK" = "0.0.0.0" ] || [ "$BIND_CHECK" = "*" ]; then
+        test_pass "MySQL écoute sur 0.0.0.0 (accès réseau OK)"
+    elif [ "$BIND_CHECK" = "127.0.0.1" ]; then
+        test_fail "MySQL écoute sur 127.0.0.1 uniquement (pas d'accès réseau!)"
+    elif [ "$BIND_CHECK" = "N/A" ]; then
+        test_warn "Impossible de lire bind_address"
+    else
+        test_warn "MySQL bind_address: $BIND_CHECK (valeur inattendue)"
+    fi
+fi
+
 # ============================================================================
 # 4. TESTS FREERADIUS
 # ============================================================================
@@ -317,17 +333,27 @@ else
 fi
 
 # ============================================================================
-# 7. TESTS HARDENING - SSH
+# 7. TESTS HARDENING - SSH (RENFORCÉ)
 # ============================================================================
 section_header "7. HARDENING - SSH"
 
 subsection "Configuration SSH sécurisée"
 
 if [ -f /etc/ssh/sshd_config ]; then
-    if grep -qE "^PermitRootLogin (no|prohibit-password)" /etc/ssh/sshd_config; then
-        test_pass "Root login désactivé"
+    # Test CRITIQUE: Root login désactivé
+    if grep -qE "^PermitRootLogin no" /etc/ssh/sshd_config; then
+        test_pass "Root login désactivé (PermitRootLogin no)"
+    elif grep -qE "^PermitRootLogin prohibit-password" /etc/ssh/sshd_config; then
+        test_pass "Root login avec clé seulement (prohibit-password)"
     else
-        test_fail "Root login non désactivé"
+        test_fail "Root login ENCORE ACTIF ⚠️ VULNÉRABILITÉ CRITIQUE!"
+    fi
+    
+    # Test authentification par mot de passe
+    if grep -qE "^PasswordAuthentication no" /etc/ssh/sshd_config; then
+        test_pass "Authentification par mot de passe désactivée"
+    else
+        test_warn "Authentification par mot de passe encore active"
     fi
     
     if grep -q "^MaxAuthTries" /etc/ssh/sshd_config; then
@@ -400,6 +426,19 @@ if command -v auditctl &> /dev/null; then
         rule_count=$(auditctl -l 2>/dev/null | grep -cv "No rules")
         if [ "$rule_count" -gt 0 ]; then
             test_pass "Règles audit chargées ($rule_count règles)"
+            
+            # Vérifier surveillance des fichiers RADIUS et MySQL
+            if auditctl -l 2>/dev/null | grep -q "/etc/freeradius"; then
+                test_pass "Surveillance /etc/freeradius active"
+            else
+                test_warn "Surveillance /etc/freeradius non détectée"
+            fi
+            
+            if auditctl -l 2>/dev/null | grep -q "/etc/mysql"; then
+                test_pass "Surveillance /etc/mysql active"
+            else
+                test_warn "Surveillance /etc/mysql non détectée"
+            fi
         else
             test_warn "Aucune règle audit détectée"
         fi
@@ -540,20 +579,41 @@ if command -v apache2ctl &> /dev/null; then
     fi
 fi
 
-# Vérifier les mots de passe par défaut
-subsection "Mots de passe par défaut (CRITIQUE)"
+# Vérifier les mots de passe par défaut RADIUS (CRITIQUE)
+subsection "Secrets RADIUS (CRITIQUE - SÉCURITÉ)"
 
 if [ -f /etc/freeradius/3.0/clients.conf ]; then
-    if grep -q "secret.*=.*testing123" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
-        test_warn "⚠️ Secret RADIUS par défaut détecté (CHANGEZ-LE!)"
+    # Test secret testing123
+    if grep -qE "secret.*=.*(testing123|\"testing123\")" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
+        test_fail "⚠️ SECRET 'testing123' DÉTECTÉ - CHANGEZ-LE IMMÉDIATEMENT!"
     else
-        test_pass "Secret RADIUS modifié"
+        test_pass "Secret 'testing123' modifié ou absent"
+    fi
+    
+    # Test secret MR100 par défaut
+    if grep -qE "(MR100_RADIUS_SECRET_CHANGE_ME|SITE._RADIUS_SECRET_CHANGE_ME)" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
+        test_fail "⚠️ SECRET MR100 PAR DÉFAUT DÉTECTÉ - CHANGEZ-LE AVANT PRODUCTION!"
+    else
+        test_pass "Secret MR100 modifié"
     fi
 fi
 
 # Vérifier compte admin PHP
 if [ -f /var/www/html/admin/config.php ]; then
     test_info "PHP-Admin installé - Vérifiez le mot de passe admin"
+fi
+
+# Vérifier .gitignore actif (CRITIQUE)
+subsection ".gitignore actif (SÉCURITÉ)"
+
+if [ -f .gitignore ]; then
+    test_pass ".gitignore existe (fichiers sensibles ignorés)"
+else
+    test_fail ".gitignore ABSENT - Fichiers sensibles peuvent être commités!"
+fi
+
+if [ -f gitignore ]; then
+    test_fail "Ancien fichier 'gitignore' (sans point) détecté - INACTIF!"
 fi
 
 # ============================================================================
