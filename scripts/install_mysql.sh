@@ -354,22 +354,53 @@ log_message "INFO" "Redémarrage MySQL avec configuration réseau forcée..."
 systemctl restart "$SERVICE_NAME"
 sleep 3
 
-# Verify MySQL is listening on network
+# ============================================================================
+# VALIDATION STRICTE DU BINDING RÉSEAU
+# ============================================================================
+
+log_message "INFO" "Vérification stricte du binding MySQL..."
+
+# Vérifier via SHOW VARIABLES
+BIND_CHECK=$(mysql -u root -e "SHOW VARIABLES LIKE 'bind_address';" | grep bind_address | awk '{print $2}')
+
+if [ -z "$BIND_CHECK" ]; then
+    log_message "ERROR" "Impossible de lire bind_address depuis MySQL"
+    error_exit "Échec validation binding"
+fi
+
+log_message "INFO" "bind_address détecté: $BIND_CHECK"
+
+if [ "$BIND_CHECK" != "0.0.0.0" ] && [ "$BIND_CHECK" != "*" ]; then
+    log_message "ERROR" "MySQL n'écoute pas sur 0.0.0.0 (valeur: $BIND_CHECK)"
+    log_message "ERROR" "Vérifier /etc/mysql/mysql.conf.d/zzz-sae501-network.cnf"
+    log_message "ERROR" "Commande debug: mysql -e 'SHOW VARIABLES LIKE \"bind_address\";'"
+    error_exit "Configuration réseau MySQL incorrecte"
+fi
+
+# Verify MySQL is listening on network (double check)
 MYSQL_LISTEN=$(ss -tlnp | grep 3306 || echo "")
 if echo "$MYSQL_LISTEN" | grep -qE "(0.0.0.0:3306|\*:3306)"; then
     log_message "SUCCESS" "✅ MySQL écoute sur 0.0.0.0:3306 (toutes interfaces)"
 else
-    log_message "WARNING" "⚠️  MySQL binding: $MYSQL_LISTEN"
-    log_message "WARNING" "Vérification manuelle requise"
+    log_message "WARNING" "⚠️  MySQL binding ss output: $MYSQL_LISTEN"
+    log_message "WARNING" "bind_address=$BIND_CHECK mais ss montre autre chose"
 fi
 
-# Store credentials securely
+# Store credentials securely - NOMS DE VARIABLES UNIFIÉS
 log_message "INFO" "Stockage sécurisé des identifiants..."
 mkdir -p /opt/sae501/secrets
 cat > /opt/sae501/secrets/db.env << EOF
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=radius
+
+# Noms unifiés pour cohérence avec install_radius.sh
+MYSQL_RADIUS_USER=radiususer
+MYSQL_RADIUS_PASS='$RADIUS_PASSWORD'
+MYSQL_PHP_USER=sae501_php
+MYSQL_PHP_PASS='$ADMIN_PASSWORD'
+
+# Anciens noms (compatibilité)
 DB_USER_RADIUS=radiususer
 DB_PASSWORD_RADIUS='$RADIUS_PASSWORD'
 DB_USER_PHP=sae501_php
@@ -420,5 +451,6 @@ echo ""
 echo "Les identifiants sont également stockés dans:"
 echo "/opt/sae501/secrets/db.env (permissions: 640)"
 echo ""
+echo "MySQL bind_address: $BIND_CHECK"
 echo "MySQL écoute sur: $(ss -tlnp | grep 3306 | awk '{print $4}')"
 echo "============================================"
