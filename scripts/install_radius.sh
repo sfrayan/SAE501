@@ -408,7 +408,7 @@ INNER_TUNNEL_EOF
 }
 
 # ============================================================================
-# DÉPLOIEMENT CLIENTS.CONF DEPUIS LE REPO
+# DÉPLOIEMENT CLIENTS.CONF DEPUIS LE REPO + GARANTIE LOCALHOST
 # ============================================================================
 
 deploy_clients_conf() {
@@ -436,9 +436,12 @@ deploy_clients_conf() {
     
     if [[ "$CLIENTS_FOUND" == "false" ]]; then
         log_msg "⚠️  WARNING: clients.conf not found in repository"
-        log_msg "Creating minimal localhost client..."
+        log_msg "Creating new clients.conf with localhost..."
         
         cat > /etc/freeradius/3.0/clients.conf << 'CLIENTS_EOF'
+# SAE501 - RADIUS Clients Configuration
+# Généré automatiquement par install_radius.sh
+
 client localhost {
     ipaddr = 127.0.0.1
     ipv6addr = ::1
@@ -450,7 +453,28 @@ CLIENTS_EOF
         
         chmod 640 /etc/freeradius/3.0/clients.conf
         chown freerad:freerad /etc/freeradius/3.0/clients.conf
-        log_msg "✓ Minimal clients.conf created"
+        log_msg "✓ clients.conf created with localhost client"
+    else
+        # Vérifier si localhost existe déjà
+        if ! grep -q "client localhost" /etc/freeradius/3.0/clients.conf 2>/dev/null; then
+            log_msg "⚠️  Client localhost manquant, ajout automatique..."
+            
+            cat >> /etc/freeradius/3.0/clients.conf << 'LOCALHOST_EOF'
+
+# SAE501 - Local testing client (ajouté automatiquement)
+client localhost {
+    ipaddr = 127.0.0.1
+    ipv6addr = ::1
+    secret = testing123
+    shortname = localhost
+    nastype = other
+}
+LOCALHOST_EOF
+            
+            log_msg "✓ Client localhost ajouté au clients.conf existant"
+        else
+            log_msg "✓ Client localhost déjà présent dans clients.conf"
+        fi
     fi
 }
 
