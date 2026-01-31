@@ -297,6 +297,50 @@ log_message "SUCCESS" "Utilisateur PHP admin créé"
 # Wait for PHP user to be available
 sleep 1
 
+# Configure MySQL for network binding
+log_message "INFO" "Configuration MySQL pour écoute réseau..."
+mkdir -p /etc/mysql/mysql.conf.d
+
+cat > /etc/mysql/mysql.conf.d/sae501-network.cnf << 'EOF'
+# SAE501 - MySQL Network Configuration
+# Permet l'accès réseau à MySQL (essentiel pour FreeRADIUS)
+
+[mysqld]
+# Network binding - écoute sur toutes les interfaces
+bind-address = 0.0.0.0
+
+# Security
+symbolic-links = 0
+local-infile = 0
+
+# Performance
+max_connections = 200
+connect_timeout = 10
+wait_timeout = 600
+max_allowed_packet = 64M
+EOF
+
+log_message "SUCCESS" "Configuration réseau MySQL créée"
+
+# Comment bind-address in default config if present
+if [ -f "/etc/mysql/mysql.conf.d/mysqld.cnf" ]; then
+    log_message "INFO" "Désactivation bind-address par défaut..."
+    sed -i 's/^bind-address/#bind-address/' /etc/mysql/mysql.conf.d/mysqld.cnf 2>/dev/null || true
+fi
+
+# Restart MySQL to apply network configuration
+log_message "INFO" "Redémarrage MySQL avec configuration réseau..."
+systemctl restart "$SERVICE_NAME"
+sleep 3
+
+# Verify MySQL is listening on network
+MYSQL_LISTEN=$(ss -tlnp | grep 3306 || echo "")
+if echo "$MYSQL_LISTEN" | grep -qE "(0.0.0.0:3306|\*:3306)"; then
+    log_message "SUCCESS" "MySQL écoute sur 0.0.0.0:3306 (toutes interfaces)"
+else
+    log_message "WARNING" "MySQL binding: $MYSQL_LISTEN"
+fi
+
 # Store credentials securely
 log_message "INFO" "Stockage sécurisé des identifiants..."
 mkdir -p /opt/sae501/secrets
@@ -337,7 +381,7 @@ fi
 # Insert a test user
 log_message "INFO" "Création d'un utilisateur de test..."
 mysql -u radiususer -p"$RADIUS_PASSWORD" radius << MYSQL_TEST_USER
-INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'password123');
+INSERT IGNORE INTO radcheck (username, attribute, op, value) VALUES ('testuser', 'Cleartext-Password', ':=', 'testpass');
 INSERT IGNORE INTO user_status (username, active) VALUES ('testuser', TRUE);
 MYSQL_TEST_USER
 
@@ -353,4 +397,6 @@ echo "sae501_php password: $ADMIN_PASSWORD"
 echo ""
 echo "Les identifiants sont également stockés dans:"
 echo "/opt/sae501/secrets/db.env (permissions: 640)"
+echo ""
+echo "MySQL écoute sur: 0.0.0.0:3306 (réseau)"
 echo "============================================"
