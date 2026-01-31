@@ -355,7 +355,7 @@ systemctl restart "$SERVICE_NAME"
 sleep 3
 
 # ============================================================================
-# VALIDATION STRICTE DU BINDING RÉSEAU
+# VALIDATION STRICTE RENFORCÉE DU BINDING RÉSEAU
 # ============================================================================
 
 log_message "INFO" "Vérification stricte du binding MySQL..."
@@ -371,20 +371,22 @@ fi
 log_message "INFO" "bind_address détecté: $BIND_CHECK"
 
 if [ "$BIND_CHECK" != "0.0.0.0" ] && [ "$BIND_CHECK" != "*" ]; then
-    log_message "ERROR" "MySQL n'écoute pas sur 0.0.0.0 (valeur: $BIND_CHECK)"
-    log_message "ERROR" "Vérifier /etc/mysql/mysql.conf.d/zzz-sae501-network.cnf"
-    log_message "ERROR" "Commande debug: mysql -e 'SHOW VARIABLES LIKE \"bind_address\";'"
-    error_exit "Configuration réseau MySQL incorrecte"
+    log_message "ERROR" "ÉCHEC CRITIQUE: MySQL n'écoute pas sur 0.0.0.0"
+    log_message "ERROR" "Valeur détectée: $BIND_CHECK"
+    log_message "ERROR" "DEBUG: Fichiers de configuration MySQL:"
+    ls -la /etc/mysql/mysql.conf.d/*.cnf
+    ls -la /etc/mysql/mariadb.conf.d/*.cnf 2>/dev/null || true
+    error_exit "Configuration réseau MySQL incorrecte - Impossible de continuer"
 fi
 
-# Verify MySQL is listening on network (double check)
-MYSQL_LISTEN=$(ss -tlnp | grep 3306 || echo "")
-if echo "$MYSQL_LISTEN" | grep -qE "(0.0.0.0:3306|\*:3306)"; then
-    log_message "SUCCESS" "✅ MySQL écoute sur 0.0.0.0:3306 (toutes interfaces)"
-else
-    log_message "WARNING" "⚠️  MySQL binding ss output: $MYSQL_LISTEN"
-    log_message "WARNING" "bind_address=$BIND_CHECK mais ss montre autre chose"
+# Verify MySQL is listening on network (double check via ss/netstat)
+if ! ss -tlnp | grep -qE "(0.0.0.0:3306|\*:3306)"; then
+    log_message "ERROR" "MySQL ne répond pas sur 0.0.0.0:3306"
+    log_message "ERROR" "Sortie ss: $(ss -tlnp | grep 3306 || echo 'Aucun processus sur 3306')"
+    error_exit "MySQL binding échoué"
 fi
+
+log_message "SUCCESS" "✅ MySQL correctement configuré sur 0.0.0.0:3306"
 
 # Store credentials securely - NOMS DE VARIABLES UNIFIÉS
 log_message "INFO" "Stockage sécurisé des identifiants..."
@@ -441,6 +443,14 @@ MYSQL_TEST_USER
 log_message "SUCCESS" "Utilisateur testuser créé"
 
 log_message "SUCCESS" "Installation MariaDB/MySQL terminée"
+
+# ============================================================================
+# AFFICHAGE FINAL DÉTAILLÉ AVEC DEBUG INFO
+# ============================================================================
+
+SKIP_NETWORKING=$(mysql -u root -e 'SHOW VARIABLES LIKE "skip_networking";' 2>/dev/null | grep skip | awk '{print $2}' || echo "OFF")
+MYSQL_PORT_LISTEN=$(ss -tlnp | grep 3306 | awk '{print $4}' || echo "NON DÉTECTÉ")
+
 echo ""
 echo "============================================"
 echo "IDENTIFIANTS IMPORTANTS - A SAUVEGARDER"
@@ -448,9 +458,14 @@ echo "============================================"
 echo "radiususer password: $RADIUS_PASSWORD"
 echo "sae501_php password: $ADMIN_PASSWORD"
 echo ""
-echo "Les identifiants sont également stockés dans:"
+echo "MySQL Configuration:"
+echo "  bind_address: $BIND_CHECK"
+echo "  skip_networking: $SKIP_NETWORKING"
+echo "  Écoute sur: $MYSQL_PORT_LISTEN"
+echo ""
+echo "Les identifiants sont stockés dans:"
 echo "/opt/sae501/secrets/db.env (permissions: 640)"
 echo ""
-echo "MySQL bind_address: $BIND_CHECK"
-echo "MySQL écoute sur: $(ss -tlnp | grep 3306 | awk '{print $4}')"
+echo "DEBUG - Fichiers MySQL chargés:"
+mysql -u root -e "SELECT * FROM performance_schema.file_instances WHERE file_name LIKE '%my.cnf%' OR file_name LIKE '%mysqld.cnf%';" 2>/dev/null || echo "  (performance_schema désactivé)"
 echo "============================================"
