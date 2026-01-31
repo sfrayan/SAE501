@@ -1,5 +1,41 @@
 # SAE501 - Architecture Wi-Fi Sécurisée Multi-Sites
 
+## ⚠️ MISE À JOUR CRITIQUE - v2.2.0 (31 janvier 2026)
+
+### 🔴 BUG CRITIQUE CORRIGÉ: Credentials MySQL hardcodés
+
+**Problème identifié**: Le script `install_php_admin.sh` utilisait un mot de passe MySQL **hardcodé** au lieu de charger les vrais credentials depuis `/opt/sae501/secrets/db.env`.
+
+**Impact**: 
+- ❌ PHP-Admin ne pouvait **pas se connecter à MySQL** après installation
+- ❌ Erreur "Access denied for user 'radiususer'@'localhost'"
+- ❌ Interfaces web non fonctionnelles
+
+**Correction appliquée** (Commit [`b08bdc8`](https://github.com/sfrayan/SAE501/commit/b08bdc84e2b0538bcfd5685519205acdd56c00f5)):
+- ✅ Chargement des **vrais credentials** depuis `/opt/sae501/secrets/db.env`
+- ✅ Vérification de l'existence de `db.env` avant génération
+- ✅ Support Debian 11 (PHP 7.4) et Debian 12 (PHP 8.x)
+- ✅ Test de connexion MySQL post-installation
+
+**Action requise**:
+
+```bash
+# Si vous avez une installation existante avec PHP-Admin non fonctionnel:
+cd /opt/SAE501
+git pull origin main
+
+# Ré-exécuter le script corrigé:
+sudo bash scripts/install_php_admin.sh
+
+# Vérifier que PHP-Admin fonctionne:
+curl -I http://localhost/admin
+# Attendu: HTTP/1.1 200 OK
+```
+
+**Nouvelles installations**: Utilisez directement la version corrigée (`install_php_admin.sh` v2.2.0).
+
+---
+
 ## 🌟 But du projet
 
 Créer une **infrastructure d'authentification RADIUS centralisée** pour une chaîne de salles de sport permettant:
@@ -23,6 +59,7 @@ Créer une **infrastructure d'authentification RADIUS centralisée** pour une ch
 
 ### **PHP-Admin** (Port 80/443) 🆕
 - ✨ **100% AUTO-GÉNÉRÉ - ZÉRO DÉPENDANCE**
+- ✅ **BUG CORRIGÉ v2.2.0**: Credentials MySQL chargés depuis `db.env`
 - Interface web responsive moderne
 - Toutes les pages PHP créées durant l'installation
 - Gestion complète des utilisateurs RADIUS
@@ -123,12 +160,13 @@ sudo bash scripts/install_mysql.sh
 #    - Test d'authentification
 sudo bash scripts/install_radius.sh
 
-# 3. Installer PHP-Admin (interface web) 🆕
+# 3. Installer PHP-Admin (interface web) 🆕 ✅ VERSION CORRIGÉE v2.2.0
 # ✨ GÉNÈRE AUTOMATIQUEMENT:
 #    - Toutes les pages PHP (login, dashboard, users, audit, system)
 #    - Configuration Apache complète
 #    - Permissions sécurisées
 #    - Design moderne responsive
+#    - ✅ CHARGE LES VRAIS CREDENTIALS DEPUIS db.env!
 #    - ZÉRO fichier externe requis!
 sudo bash scripts/install_php_admin.sh
 
@@ -164,17 +202,11 @@ sudo bash scripts/install_hardening.sh
 - **Avec Wazuh**: 20-30 minutes (installation complète + Dashboard)
 - **Hardening**: +2-3 minutes
 
-**✨ Nouveautés Hardening v2.0**:
-- ✅ **Installation en 1 commande** - Zéro configuration manuelle
-- ✅ **9 modules de sécurité** activés automatiquement
-- ✅ **UFW pré-configuré** avec règles optimales
-- ✅ **SSH durci** selon les best practices
-- ✅ **Fail2Ban** actif sur SSH et Apache
-- ✅ **Auditd** surveille tous les fichiers critiques
-- ✅ **Apache sécurisé** (headers CSP, XSS, modules)
-- ✅ **MySQL durci** (logging, performance schema)
-- ✅ **Politiques utilisateurs** renforcées (PAM)
-- ✅ **Production-ready** en sortie d'installation
+**✨ Nouveautés v2.2.0 (PHP-Admin)**:
+- ✅ **BUG CORRIGÉ**: Credentials MySQL chargés depuis `/opt/sae501/secrets/db.env`
+- ✅ **Support Debian 11**: Détection version + installation PHP adaptée (7.4 ou 8.x)
+- ✅ **Test connexion MySQL**: Vérification automatique post-installation
+- ✅ **Logs détaillés**: Traçabilité complète dans `/var/log/sae501_php_admin_install.log`
 
 **Avantages de l'installation modulaire**:
 - ✅ Contrôle total sur chaque composant
@@ -198,7 +230,7 @@ sudo bash tests/run_all_tests.sh
 - ✅ Connectivité réseau (ports 22, 80, 443, 1812, 1813, 3306)
 - ✅ Base de données (tables, utilisateurs)
 - ✅ Configuration RADIUS (modules SQL, EAP, clients)
-- ✅ PHP-Admin (pages, permissions)
+- ✅ PHP-Admin (pages, permissions, **connexion MySQL**)
 - ✅ UFW Firewall (actif, règles)
 - ✅ SSH hardening (root disabled, chiffrement)
 - ✅ Fail2Ban (jails SSH/Apache)
@@ -269,6 +301,8 @@ Mot de passe: Admin@Secure123!
 - ➕ **Ajouter**: Création rapide d'utilisateurs
 - 📄 **Logs**: Audit détaillé des actions
 - ⚙️ **Système**: Informations et diagnostics
+
+**✅ Si PHP-Admin fonctionne = BUG CORRIGÉ avec succès!**
 
 ---
 
@@ -364,6 +398,7 @@ Sur un ordinateur:
 - ✅ Validation des champs
 - ✅ Logs d'audit automatiques
 - ✅ Aucune commande SQL manuelle
+- ✅ Connexion MySQL fonctionnelle (bug corrigé!)
 
 ### 7.2 Lister les utilisateurs
 
@@ -513,6 +548,7 @@ sudo journalctl --vacuum-time=30d
 - [ ] 🚫 Vérifiez que Fail2Ban est actif (`fail2ban-client status`)
 - [ ] 💾 Testez les sauvegardes (restauration)
 - [ ] 🔍 Vérifiez les logs de sécurité quotidiennement
+- [ ] ✅ Vérifiez que PHP-Admin se connecte bien à MySQL (bug corrigé v2.2.0)
 
 ### 🛡️ Hardening appliqué automatiquement
 
@@ -539,7 +575,7 @@ SAE501/
 ├── scripts/                    # Scripts d'installation
 │   ├── install_mysql.sh        ⚙️ Base de données
 │   ├── install_radius.sh       ⚙️ Serveur RADIUS (100% AUTONOME)
-│   ├── install_php_admin.sh    ⚙️ Interface web (100% AUTONOME) 🆕
+│   ├── install_php_admin.sh    ⚙️ Interface web (100% AUTONOME) ✅ v2.2.0
 │   ├── install_wazuh.sh        ⚙️ Monitoring (100% AUTONOME)
 │   ├── install_hardening.sh    ⚙️ Sécurité (100% AUTONOME) ⭐🆕
 │   ├── generate_certificates.sh
@@ -577,6 +613,7 @@ Toutes les configurations sont générées automatiquement par les scripts.
 |----------|----------|
 | Tests échoués | Relancer: `sudo bash tests/run_all_tests.sh` |
 | PHP-Admin inaccessible | `sudo systemctl restart apache2 php-fpm` |
+| **❌ PHP-Admin erreur MySQL** | **✅ CORRIGÉ en v2.2.0**: `git pull && sudo bash scripts/install_php_admin.sh` |
 | Pages PHP manquantes | Relancer: `sudo bash scripts/install_php_admin.sh` |
 | Erreur connexion DB | Vérifier MySQL: `sudo systemctl status mysql` |
 | RADIUS ne démarre pas | `sudo freeradius -X` pour debug |
@@ -594,7 +631,7 @@ Toutes les configurations sont générées automatiquement par les scripts.
 # Installation modulaire (DANS L'ORDRE)
 sudo bash scripts/install_mysql.sh
 sudo bash scripts/install_radius.sh      # ✨ 100% AUTONOME
-sudo bash scripts/install_php_admin.sh    # ✨ 100% AUTONOME 🆕
+sudo bash scripts/install_php_admin.sh    # ✨ 100% AUTONOME ✅ v2.2.0
 sudo bash scripts/install_wazuh.sh        # ✨ 100% AUTONOME (OPTIONNEL)
 sudo bash scripts/install_hardening.sh    # ✨ 100% AUTONOME ⭐🆕
 
@@ -619,6 +656,10 @@ ssh -vvv user@localhost
 # Tester firewall
 sudo ufw status verbose
 nmap -p 22,80,443,1812,1813,3306,5601 localhost
+
+# Tester PHP-Admin connexion MySQL (bug corrigé)
+curl -I http://localhost/admin
+# Attendu: HTTP/1.1 200 OK
 ```
 
 ### Monitoring
@@ -636,6 +677,9 @@ sudo ausearch -k sshd_config_changes
 
 # Logs Apache
 sudo tail -f /var/log/apache2/error.log
+
+# Logs PHP-Admin installation (debug si problème)
+sudo tail -f /var/log/sae501_php_admin_install.log
 ```
 
 ### Interfaces web
@@ -681,7 +725,8 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - [ ] Scripts exécutés dans l'ordre
 - [ ] **Tous les tests passés** (`sudo bash tests/run_all_tests.sh`) ✨
 - [ ] FreeRADIUS démarré et test `testuser` fonctionne
-- [ ] **PHP-Admin accessible sur http://IP/admin** 🆕
+- [ ] **PHP-Admin accessible sur http://IP/admin** ✅ v2.2.0
+- [ ] **PHP-Admin se connecte à MySQL sans erreur** ✅ BUG CORRIGÉ
 - [ ] **Hardening exécuté avec succès** ⭐🆕
 
 ### Sécurité
@@ -714,7 +759,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 - **Installation modulaire**: 15-35 minutes selon composants
 - **Flexibilité**: Installez uniquement ce dont vous avez besoin
 - **RADIUS 100% autonome**: Aucun fichier externe requis (sauf `clients.conf`)
-- **PHP-Admin 100% autonome**: 🆕 Toutes pages générées durant installation
+- **PHP-Admin 100% autonome**: ✅ v2.2.0 - Toutes pages générées durant installation + credentials corrects
 - **Wazuh 100% autonome**: Manager + Dashboard en un seul script
 - **Hardening 100% autonome**: ⭐🆕 9 modules de sécurité en 1 commande
 - **Tests automatisés**: ✨ Suite complète pour validation
@@ -728,7 +773,7 @@ tar -czf backup_hardening.tar.gz /etc/ssh /etc/ufw /etc/fail2ban
 # Installation complète recommandée:
 sudo bash scripts/install_mysql.sh
 sudo bash scripts/install_radius.sh       # ✨ 100% AUTONOME
-sudo bash scripts/install_php_admin.sh     # ✨ 100% AUTONOME 🆕
+sudo bash scripts/install_php_admin.sh     # ✨ 100% AUTONOME ✅ v2.2.0
 sudo bash scripts/install_hardening.sh     # ✨ 100% AUTONOME ⭐🆕
 
 # Optionnel - Monitoring avancé:
@@ -748,6 +793,7 @@ sudo auditctl -l
 # Accéder à PHP-Admin:
 http://VOTRE_IP/admin
 User: admin | Pass: Admin@Secure123!
+# ✅ Connexion MySQL fonctionnelle depuis v2.2.0!
 
 # Tester RADIUS:
 radtest testuser testpass localhost 0 testing123
@@ -762,9 +808,10 @@ radtest testuser testpass localhost 0 testing123
 - **Issues**: [GitHub Issues](https://github.com/sfrayan/SAE501/issues)
 - **Documentation**: Dossier `docs/`
 - **Logs**: `/var/log/freeradius/`, `/var/log/apache2/`, `/var/log/mysql/`
+- **Changelog**: Voir commit [`b08bdc8`](https://github.com/sfrayan/SAE501/commit/b08bdc84e2b0538bcfd5685519205acdd56c00f5) pour bug fix v2.2.0
 
 ---
 
 *SAE501 - Projet SAE - Sorbonne Paris Nord*  
 *Dernière mise à jour: 31 janvier 2026*  
-*Version: 4.1 - Tests automatisés + Validation complète*
+*Version: 4.2 - ✅ BUG FIX v2.2.0 + Tests automatisés*
